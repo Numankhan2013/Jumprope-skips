@@ -10,7 +10,32 @@ It's meant for long sessions (thousands of skips) and for people who trip on the
 time the rope catches, you stop, and you start again, the counter notices and starts a new set.
 Those pauses are billed as rest, so they don't inflate your calorie number.
 
-## Install
+## On your phone (no install)
+
+`web/` is a single web page that does the whole analysis **inside your phone's browser**: pick a
+video from your gallery and get skips, sets, pace and calories. Nothing is uploaded, so there's
+no file-size limit. It uses the same counting algorithm as the Python version (see below), and
+scores 51/51 on the test clip in a real browser.
+
+- **Fast path:** WebCodecs + [mp4box.js](https://github.com/gpac/mp4box.js) decode MP4/MOV with
+  the phone's hardware decoder, faster than playing the video back. Works in current Chrome
+  (Android) and Safari 16.4+ (iPhone). Handles the rotate flag that phones put on portrait videos,
+  and files whose index is at the end.
+- **Fallback:** if the fast path isn't available, it plays the video (muted) and analyses frames
+  as they're shown. This runs at real-time speed and is less exact if the phone drops frames.
+- **Check the count:** after analysis you can play your video with the live counter on top.
+
+**Host it yourself for free (Cloudflare Pages):**
+
+```bash
+python web/build.py          # → web/dist/index.html (one self-contained file)
+npx wrangler pages deploy web/dist --project-name skip-count
+```
+
+or drag the `web/dist` folder into *Cloudflare dashboard → Workers & Pages → Create → Pages →
+Upload assets*. GitHub Pages or Netlify work too: it's one static file.
+
+## Install (command line)
 
 ```bash
 pip install -r requirements.txt

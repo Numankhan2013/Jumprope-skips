@@ -6,8 +6,8 @@ Two backends:
                signal is the body's vertical position measured in torso
                lengths. Most accurate on real footage. Model is downloaded
                once (~5 MB) and cached.
-* ``motion`` – Pure OpenCV dense optical flow. Tracks the vertical
-               motion of everything that moves. No model needed, works on
+* ``motion`` – Block matching (same algorithm as the phone page). Tracks the
+               vertical motion of everything that moves. No model needed, works on
                anything, but needs a still camera and is fooled more easily
                by other moving things in the shot.
 
@@ -186,30 +186,89 @@ def extract_pose(path, *, model="lite", max_fps=30.0, max_width=640, start=0.0, 
 # --------------------------------------------------------------------------- motion
 
 
-def extract_motion(path, *, max_fps=30.0, max_width=240, start=0.0, end=None, progress=True) -> BodySignal:
-    """Dense optical flow: integrate the median motion of whatever is moving.
+_B, _R = 8, 4  # block size and search radius (pixels at 160 px width)
+
+
+def frame_motion(prev: np.ndarray, cur: np.ndarray) -> tuple[float, float, float]:
+    """Block matching between two grayscale frames, same algorithm as web/core.js.
+
+    Returns (vy, vx, frac): median motion of the blocks that clearly moved,
+    and the fraction of textured blocks that moved (high = camera moved).
+    """
+    h, w = cur.shape
+    nby, nbx = (h - 2 * _R) // _B, (w - 2 * _R) // _B
+    if nby < 1 or nbx < 1:
+        return 0.0, 0.0, 0.0
+    cur = cur.astype(np.int16)
+    prev = prev.astype(np.int16)
+    ys, xs = slice(_R, _R + nby * _B), slice(_R, _R + nbx * _B)
+
+    def blocks(img):  # (nby, nbx, B, B)
+        return img.reshape(nby, _B, nbx, _B).swapaxes(1, 2)
+
+    cb = blocks(cur[ys, xs])
+    textured = (cb.max(axis=(2, 3)) - cb.min(axis=(2, 3))) >= 12
+    zero = np.abs(cur[ys, xs] - prev[ys, xs]).reshape(nby, _B, nbx, _B).sum(axis=(1, 3))
+    cand = textured & (zero >= 2 * _B * _B)
+
+    k = 2 * _R + 1
+    sad = np.empty((k, k, nby, nbx), np.int32)
+    for dy in range(-_R, _R + 1):
+        for dx in range(-_R, _R + 1):
+            shifted = prev[_R - dy:_R - dy + nby * _B, _R - dx:_R - dx + nbx * _B]
+            sad[dy + _R, dx + _R] = np.abs(cur[ys, xs] - shifted).reshape(nby, _B, nbx, _B).sum(axis=(1, 3))
+    flat = sad.reshape(k * k, nby, nbx)
+    # tie-break towards the smallest displacement, like the JS version
+    dyg, dxg = np.meshgrid(np.arange(-_R, _R + 1), np.arange(-_R, _R + 1), indexing="ij")
+    order = np.argsort((dyg ** 2 + dxg ** 2).ravel(), kind="stable")
+    best_o = np.argmin(flat[order], axis=0)
+    best_i = order[best_o]
+    best = np.take_along_axis(flat, best_i[None], 0)[0]
+    bdy, bdx = best_i // k - _R, best_i % k - _R
+    moved = cand & (zero - best >= 2 * _B * _B)
+
+    vys, vxs = [], []
+    for by, bx in zip(*np.nonzero(moved)):
+        dy, dx, b0 = int(bdy[by, bx]), int(bdx[by, bx]), float(best[by, bx])
+        at = lambda ddx, ddy: float(sad[ddy + _R, ddx + _R, by, bx])  # noqa: E731
+        fy, fx = float(dy), float(dx)
+        if -_R < dy < _R:
+            a, c = at(dx, dy - 1), at(dx, dy + 1)
+            d = a - 2 * b0 + c
+            if d > 0:
+                fy += 0.5 * (a - c) / d
+        if -_R < dx < _R:
+            a, c = at(dx - 1, dy), at(dx + 1, dy)
+            d = a - 2 * b0 + c
+            if d > 0:
+                fx += 0.5 * (a - c) / d
+        if np.hypot(fx, fy) >= 0.3:
+            vys.append(fy)
+            vxs.append(fx)
+    n_tex = int(textured.sum())
+    frac = len(vys) / n_tex if n_tex else 0.0
+    vy = float(np.median(vys)) if len(vys) >= 3 else 0.0
+    vx = float(np.median(vxs)) if len(vxs) >= 3 else 0.0
+    return vy, vx, frac
+
+
+def extract_motion(path, *, max_fps=30.0, max_width=160, start=0.0, end=None, progress=True) -> BodySignal:
+    """Integrate the median motion of whatever is moving (block matching).
 
     For someone skipping in front of a still camera, "whatever is moving" is
-    overwhelmingly their body, so the integrated vertical flow is their height.
+    overwhelmingly their body, so the integrated vertical motion is their height.
     Slow drift from integration is removed later by the band-pass filter.
+    Identical algorithm to the phone page (web/core.js), so both agree.
     """
     prev = None
-    ts, vys, vxs, heights, still = [], [], [], [], []
+    ts, vys, vxs, still = [], [], [], []
+    h = None
     for t, frame in _frames(path, max_fps, max_width, start, end, progress):
-        gray = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (3, 3), 0)
-        vy = vx = 0.0
-        frac = 0.0
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        h = gray.shape[0]
+        vy = vx = frac = 0.0
         if prev is not None:
-            flow = cv2.calcOpticalFlowFarneback(prev, gray, None, 0.5, 3, 13, 3, 5, 1.1, 0)
-            mag = np.hypot(flow[..., 0], flow[..., 1])
-            moving = mag > 0.3
-            frac = float(moving.mean())
-            if moving.sum() > 0.001 * mag.size:
-                vy = float(np.median(flow[..., 1][moving]))
-                vx = float(np.median(flow[..., 0][moving]))
-                rows = np.nonzero(moving)[0]
-                lo, hi = np.percentile(rows, [2, 98])
-                heights.append(hi - lo)
+            vy, vx, frac = frame_motion(prev, gray)
         prev = gray
         ts.append(t)
         vys.append(vy)
@@ -219,9 +278,7 @@ def extract_motion(path, *, max_fps=30.0, max_width=240, start=0.0, end=None, pr
         still.append(frac < 0.6)
     fps = _effective_fps(path, max_fps)
     t = np.asarray(ts, float)
-    body = np.median(heights) if heights else 100.0
-    # Express in "torso lengths" (≈ 1/3 of the moving body) to share thresholds with pose.
-    unit = max(body / 3.0, 1.0)
+    unit = (h or 9) / 9.0  # ~"torso lengths" for someone filling the frame
     return BodySignal(t=t, y=np.cumsum(vys) / unit, x=np.cumsum(vxs) / unit, fps=fps,
                       duration=(t[-1] - t[0] + 1 / fps) if len(t) else 0.0, backend="motion",
                       valid=np.asarray(still, bool))

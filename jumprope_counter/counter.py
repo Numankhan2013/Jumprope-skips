@@ -84,7 +84,7 @@ def count_skips(
     horizontal: np.ndarray | None = None,
     max_walk_speed: float = 0.8,
     typical_fraction: float = 0.4,
-    edge_fraction: float = 0.7,
+    edge_fraction: float = 0.62,
     valid: np.ndarray | None = None,
 ) -> CountResult:
     """Count skips.
@@ -172,16 +172,26 @@ def count_skips(
             trains[-1].append(p)
         else:
             trains.append([p])
-    prom_of = dict(zip(peaks.tolist(), prom[keep].tolist()))
+    # The swing that starts a set and the hop where the rope catches your feet
+    # are weaker than real skips. Judge that on the *unfiltered* height (the
+    # band-pass smears neighbouring jumps into each other) and trim at most one
+    # bump at each end of a set: one swing in, one catch.
+    half = max(1, int(round(0.25 * fps / cadence)))
+    span = max(1, int(round(fps / cadence)))
+
+    def raw_rise(p: int) -> float:
+        lo, hi_ = max(p - half, 0), min(p + half + 1, n)
+        j = lo + int(np.argmax(up[lo:hi_]))
+        left = up[max(j - span, 0):j + 1].min()
+        right = up[j:min(j + span + 1, n)].min()
+        return float(up[j] - max(left, right))
+
     for seg in trains:
-        # The swing that starts a set and the hop where the rope catches your
-        # feet are weaker than real skips. Trim set edges below ~70 % of the set's
-        # median bump (one at each end at most: one swing in, one catch).
         if len(seg) >= min_segment_skips:
-            med = float(np.median([prom_of[p] for p in seg]))
-            if prom_of[seg[0]] < edge_fraction * med:
+            med = float(np.median([raw_rise(p) for p in seg]))
+            if raw_rise(seg[0]) < edge_fraction * med:
                 seg = seg[1:]
-            if seg and prom_of[seg[-1]] < edge_fraction * med:
+            if seg and raw_rise(seg[-1]) < edge_fraction * med:
                 seg = seg[:-1]
         seg_peaks = np.asarray(seg)
         if len(seg_peaks) < min_segment_skips:
