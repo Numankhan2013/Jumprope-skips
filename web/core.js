@@ -8,48 +8,74 @@
   // Block matching between two grayscale frames (Uint8Array, w*h).
   // Returns the median motion of the blocks that moved, and the fraction of
   // textured blocks that moved (high fraction = the camera itself moved).
-  const B = 8, R = 4;
+  const B = 8, R = 4, K = 2 * R + 1;
+
+  // Full search for one block. Returns sub-pixel displacement, SAD at the best
+  // shift, and the SAD table.
+  function searchBlock(prev, cur, w, bx, by) {
+    let best = Infinity, bdx = 0, bdy = 0;
+    const sad = new Float64Array(K * K);
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+      let s = 0;
+      for (let y = 0; y < B; y++) {
+        const co = (by + y) * w + bx, po = (by + y - dy) * w + bx - dx;
+        for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
+      }
+      sad[(dy + R) * K + dx + R] = s;
+      if (s < best || (s === best && dx * dx + dy * dy < bdx * bdx + bdy * bdy)) { best = s; bdx = dx; bdy = dy; }
+    }
+    const at = (dx, dy) => sad[(dy + R) * K + dx + R];
+    let fy = bdy, fx = bdx;
+    if (bdy > -R && bdy < R) { const a = at(bdx, bdy - 1), c = at(bdx, bdy + 1), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
+    if (bdx > -R && bdx < R) { const a = at(bdx - 1, bdy), c = at(bdx + 1, bdy), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
+    return { fy, fx, best, sadAt: at };
+  }
+
+  function isTextured(cur, w, bx, by) { // flat blocks (sky, plain wall) can't be matched
+    let mn = 255, mx = 0;
+    for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) { const v = cur[(by + y) * w + bx + x]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    return mx - mn >= 12;
+  }
+
+  // Background = top 20 % of the frame, plus the outer side strips in the upper
+  // half. People skipping rarely fill those, so their motion is the camera's.
+  const isBackground = (bx, by, w, h) => by + B <= 0.2 * h || ((bx + B <= 0.12 * w || bx >= 0.88 * w) && by + B <= 0.5 * h);
+
   function frameMotion(prev, cur, w, h) {
-    const vys = [], vxs = [];
-    let textured = 0;
-    for (let by = R; by + B + R <= h; by += B) {
-      for (let bx = R; bx + B + R <= w; bx += B) {
-        // texture check: skip flat blocks (sky, plain wall), they can't be matched
-        let mn = 255, mx = 0;
-        for (let y = 0; y < B; y++) for (let x = 0; x < B; x++) {
-          const v = cur[(by + y) * w + bx + x];
-          if (v < mn) mn = v; if (v > mx) mx = v;
-        }
-        if (mx - mn < 12) continue;
-        textured++;
-        // cheap pre-check: a block that didn't change can't have moved
+    // Pass 1: how did the background (= the camera) move?
+    const gys = [], gxs = [];
+    const blocks = [];
+    for (let by = R; by + B + R <= h; by += B) for (let bx = R; bx + B + R <= w; bx += B) {
+      if (!isTextured(cur, w, bx, by)) continue;
+      blocks.push([bx, by]);
+      if (isBackground(bx, by, w, h)) { const s = searchBlock(prev, cur, w, bx, by); gys.push(s.fy); gxs.push(s.fx); }
+    }
+    let gy = 0, gx = 0;
+    if (gys.length >= 6) { gy = median(gys); gx = median(gxs); }
+    const camMoving = Math.hypot(gx, gy) >= 0.3;
+    const ry = Math.round(gy), rx = Math.round(gx);
+
+    // Pass 2: blocks that moved differently from the camera are you.
+    const vys = [], vxs = [], rows = [];
+    for (const [bx, by] of blocks) {
+      if (!camMoving) { // fast path: a block that didn't change can't have moved
         let z = 0;
         for (let y = 0; y < B; y++) { const o = (by + y) * w + bx; for (let x = 0; x < B; x++) { const d = cur[o + x] - prev[o + x]; z += d < 0 ? -d : d; } }
         if (z < 2 * B * B) continue;
-        let best = Infinity, bdx = 0, bdy = 0;
-        const sad = new Float64Array((2 * R + 1) * (2 * R + 1));
-        for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-          let s = 0;
-          for (let y = 0; y < B; y++) {
-            const co = (by + y) * w + bx, po = (by + y - dy) * w + bx - dx;
-            for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
-          }
-          sad[(dy + R) * (2 * R + 1) + dx + R] = s;
-          if (s < best || (s === best && dx * dx + dy * dy < bdx * bdx + bdy * bdy)) { best = s; bdx = dx; bdy = dy; }
-        }
-        const zero = sad[R * (2 * R + 1) + R];
-        if (zero - best < 2 * B * B) continue; // not clearly moved
-        // sub-pixel refinement (parabola through neighbours)
-        const at = (dx, dy) => sad[(dy + R) * (2 * R + 1) + dx + R];
-        let fy = bdy, fx = bdx;
-        if (bdy > -R && bdy < R) { const a = at(bdx, bdy - 1), c = at(bdx, bdy + 1), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
-        if (bdx > -R && bdx < R) { const a = at(bdx - 1, bdy), c = at(bdx + 1, bdy), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
-        if (Math.hypot(fx, fy) < 0.3) continue;
-        vys.push(fy); vxs.push(fx);
       }
+      const s = searchBlock(prev, cur, w, bx, by);
+      // must match clearly better than "moved with the camera"
+      if (s.sadAt(rx, ry) - s.best < 2 * B * B) continue;
+      const dy = s.fy - gy, dx = s.fx - gx;
+      if (Math.hypot(dx, dy) < 0.3) continue;
+      vys.push(dy); vxs.push(dx); rows.push(by);
     }
-    const frac = textured ? vys.length / textured : 0;
-    return { vy: vys.length >= 3 ? median(vys) : 0, vx: vxs.length >= 3 ? median(vxs) : 0, frac, rows: vys.length };
+    // If most of the picture moves in different ways (phone being picked up,
+    // turned, zoomed), nothing there is usable.
+    const frac = blocks.length ? vys.length / blocks.length : 0;
+    // How tall is the moving body in the frame? (to warn when filmed from too far)
+    const span = vys.length >= 6 ? (percentile(rows, 95) - percentile(rows, 5) + B) / h : NaN;
+    return { vy: vys.length >= 3 ? median(vys) : 0, vx: vxs.length >= 3 ? median(vxs) : 0, frac, span, camY: gy, camX: gx };
   }
 
   // ------------------------------------------------------------- helpers
@@ -240,13 +266,14 @@
   // ------------------------------------------------------------- driver
   // Feed grayscale frames one by one; call finish() for the result.
   class Tracker {
-    constructor(w, h) { this.w = w; this.h = h; this.prev = null; this.vy = []; this.vx = []; this.valid = []; this.ts = []; }
+    constructor(w, h) { this.w = w; this.h = h; this.prev = null; this.vy = []; this.vx = []; this.valid = []; this.ts = []; this.spans = []; }
     push(gray, t) {
       this.ts.push(t == null ? this.ts.length / 30 : t);
       let m = { vy: 0, vx: 0, frac: 0 };
       if (this.prev) m = frameMotion(this.prev, gray, this.w, this.h);
       this.prev = gray;
       this.vy.push(m.vy); this.vx.push(m.vx); this.valid.push(m.frac < 0.6);
+      if (Number.isFinite(m.span) && m.frac < 0.6) this.spans.push(m.span);
     }
     // Positions on an even time grid. Frames that were skipped (slow playback)
     // are bridged by interpolation, so timing stays right.
@@ -269,7 +296,9 @@
         t.push(tk - t0); y.push(py[j] + (py[j + 1] - py[j]) * f); x.push(px[j] + (px[j + 1] - px[j]) * f);
         valid.push(this.valid[j] && this.valid[Math.min(j + 1, n - 1)]);
       }
-      return { t, y, x, valid, fps, offset: t0 };
+      // typical height of the moving body as a share of the frame (1 = fills it)
+      const bodySize = this.spans.length ? percentile(this.spans, 75) : NaN;
+      return { t, y, x, valid, fps, offset: t0, bodySize };
     }
   }
 

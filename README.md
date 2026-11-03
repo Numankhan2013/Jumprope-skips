@@ -135,6 +135,25 @@ the default.
 On synthetic workouts with known answers (stumbles, rests, walking, 15 fps video, dropped frames)
 it lands within ±1–2 skips per session. A 5,000+ skip session came out under 0.5 % off. See `tests/`.
 
+**Different places.** Sound is never used, so the surface (grass, concrete, wood) doesn't
+matter to the count. The verified clip was altered to simulate other locations and checked
+against the same 51:
+
+| condition | real skips found | extras |
+|---|---|---|
+| original | 51/51 | 0 |
+| dim, grainy light | 51/51 | +2 |
+| brightness pumping (clouds, auto-exposure) | 51/51 | +2 |
+| trees swaying in the background | 51/51 | +1 |
+| phone vibrating in time with your jumps | 51/51 | +1 |
+| phone wobbling (badly propped) | 51/51 | 0 |
+| filmed from 2× / 3× further away | 51/51 | +7 / +8 |
+
+Camera shake is handled by measuring how the background moves (top of the frame and upper side
+strips) and subtracting it. Filming from far away is the one real weak spot: the arm swing that
+starts each set looks as big as a jump, adding about one skip per set. The phone page detects
+this and asks you to move the phone closer (fill at least half the frame's height).
+
 **Calories.** Calculated in three steps:
 
 1. **Intensity from your real pace.** The *Compendium of Physical Activities* rates rope jumping

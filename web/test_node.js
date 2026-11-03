@@ -12,5 +12,5 @@ process.stdin.on("end", () => {
   const s = tr.signal();
   const r = core.countSkips(s.t, s.y, s.fps, { horizontal: s.x, valid: s.valid });
   console.log(JSON.stringify({ skips: r.skips, sets: r.sets.map(x => x.skips), jumping: r.jumpingSeconds,
-    cadence: r.cadenceHz, times: r.skipTimes }));
+    cadence: r.cadenceHz, bodySize: s.bodySize, times: r.skipTimes }));
 });

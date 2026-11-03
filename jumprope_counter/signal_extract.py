@@ -189,11 +189,19 @@ def extract_pose(path, *, model="lite", max_fps=30.0, max_width=640, start=0.0, 
 _B, _R = 8, 4  # block size and search radius (pixels at 160 px width)
 
 
+def _is_background(bx: int, by: int, w: int, h: int) -> bool:
+    """Top 20 % of the frame, plus the outer side strips in the upper half."""
+    return by + _B <= 0.2 * h or ((bx + _B <= 0.12 * w or bx >= 0.88 * w) and by + _B <= 0.5 * h)
+
+
 def frame_motion(prev: np.ndarray, cur: np.ndarray) -> tuple[float, float, float]:
     """Block matching between two grayscale frames, same algorithm as web/core.js.
 
-    Returns (vy, vx, frac): median motion of the blocks that clearly moved,
-    and the fraction of textured blocks that moved (high = camera moved).
+    1. Measure how the background (top band and upper side strips) moved: that
+       is the camera. A phone on a vibrating floor or badly propped shakes.
+    2. Blocks that moved differently from the camera are the person; return
+       their median motion relative to the camera, and the fraction of
+       textured blocks that did so (very high = the phone is being handled).
     """
     h, w = cur.shape
     nby, nbx = (h - 2 * _R) // _B, (w - 2 * _R) // _B
@@ -209,7 +217,6 @@ def frame_motion(prev: np.ndarray, cur: np.ndarray) -> tuple[float, float, float
     cb = blocks(cur[ys, xs])
     textured = (cb.max(axis=(2, 3)) - cb.min(axis=(2, 3))) >= 12
     zero = np.abs(cur[ys, xs] - prev[ys, xs]).reshape(nby, _B, nbx, _B).sum(axis=(1, 3))
-    cand = textured & (zero >= 2 * _B * _B)
 
     k = 2 * _R + 1
     sad = np.empty((k, k, nby, nbx), np.int32)
@@ -218,18 +225,14 @@ def frame_motion(prev: np.ndarray, cur: np.ndarray) -> tuple[float, float, float
             shifted = prev[_R - dy:_R - dy + nby * _B, _R - dx:_R - dx + nbx * _B]
             sad[dy + _R, dx + _R] = np.abs(cur[ys, xs] - shifted).reshape(nby, _B, nbx, _B).sum(axis=(1, 3))
     flat = sad.reshape(k * k, nby, nbx)
-    # tie-break towards the smallest displacement, like the JS version
     dyg, dxg = np.meshgrid(np.arange(-_R, _R + 1), np.arange(-_R, _R + 1), indexing="ij")
-    order = np.argsort((dyg ** 2 + dxg ** 2).ravel(), kind="stable")
-    best_o = np.argmin(flat[order], axis=0)
-    best_i = order[best_o]
-    best = np.take_along_axis(flat, best_i[None], 0)[0]
+    order = np.argsort((dyg ** 2 + dxg ** 2).ravel(), kind="stable")  # ties → smallest shift
+    best_i = order[np.argmin(flat[order], axis=0)]
+    best = np.take_along_axis(flat, best_i[None], 0)[0].astype(float)
     bdy, bdx = best_i // k - _R, best_i % k - _R
-    moved = cand & (zero - best >= 2 * _B * _B)
 
-    vys, vxs = [], []
-    for by, bx in zip(*np.nonzero(moved)):
-        dy, dx, b0 = int(bdy[by, bx]), int(bdx[by, bx]), float(best[by, bx])
+    def refine(by, bx):
+        dy, dx, b0 = int(bdy[by, bx]), int(bdx[by, bx]), best[by, bx]
         at = lambda ddx, ddy: float(sad[ddy + _R, ddx + _R, by, bx])  # noqa: E731
         fy, fx = float(dy), float(dx)
         if -_R < dy < _R:
@@ -242,9 +245,32 @@ def frame_motion(prev: np.ndarray, cur: np.ndarray) -> tuple[float, float, float
             d = a - 2 * b0 + c
             if d > 0:
                 fx += 0.5 * (a - c) / d
-        if np.hypot(fx, fy) >= 0.3:
-            vys.append(fy)
-            vxs.append(fx)
+        return fy, fx
+
+    # 1. camera motion from the background region
+    gys, gxs = [], []
+    for by, bx in zip(*np.nonzero(textured)):
+        if _is_background(_R + bx * _B, _R + by * _B, w, h):
+            fy, fx = refine(by, bx)
+            gys.append(fy)
+            gxs.append(fx)
+    gy = gx = 0.0
+    if len(gys) >= 6:
+        gy, gx = float(np.median(gys)), float(np.median(gxs))
+    cam_moving = np.hypot(gx, gy) >= 0.3
+    ry, rx = int(round(gy)), int(round(gx))
+    ry, rx = max(-_R, min(_R, ry)), max(-_R, min(_R, rx))
+
+    # 2. blocks that moved differently from the camera
+    cand = textured & ((zero >= 2 * _B * _B) | cam_moving)
+    cand &= (sad[ry + _R, rx + _R] - best) >= 2 * _B * _B
+    vys, vxs = [], []
+    for by, bx in zip(*np.nonzero(cand)):
+        fy, fx = refine(by, bx)
+        dy, dx = fy - gy, fx - gx
+        if np.hypot(dx, dy) >= 0.3:
+            vys.append(dy)
+            vxs.append(dx)
     n_tex = int(textured.sum())
     frac = len(vys) / n_tex if n_tex else 0.0
     vy = float(np.median(vys)) if len(vys) >= 3 else 0.0

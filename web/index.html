@@ -144,9 +144,10 @@ footer p { margin: 0 0 8px; }
       <summary>Filming tips</summary>
       <ul>
         <li>Prop the phone up. Don't hold it.</li>
-        <li>Keep your head and shoulders in frame the whole time. Full body is fine too.</li>
+        <li>Stand close enough to fill at least half the frame's height. Head and shoulders must stay in frame; full body is fine too.</li>
         <li>Be the only person moving in the shot.</li>
-        <li>Normal 30 fps is right. Moving the phone mid-video is fine; those moments are ignored.</li>
+        <li>Any surface or place works: grass, concrete, indoors. Sound isn't used.</li>
+        <li>A wobbly or vibrating phone is handled, and moments when you pick it up are ignored.</li>
       </ul>
     </details>
     <div id="progressBox" hidden>
@@ -511,13 +512,14 @@ async function analyse(file) {
     r.skipTimes = r.skipTimes.map(x => x + s.offset); // back to video time
     for (const st of r.sets) { st.start += s.offset; st.end += s.offset; }
     r.fps = fps;
-    window.__skipDebug = { via, frames: out.tracker.ts.length, fps, skipTimes: r.skipTimes };
+    window.__skipDebug = { via, frames: out.tracker.ts.length, fps, bodySize: s.bodySize, skipTimes: r.skipTimes };
     renderResult(r, false);
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     videoUrl = URL.createObjectURL(file);
     $("player").src = videoUrl; $("playerCard").hidden = false;
     setProgress(1, `Done: ${fmtInt(r.skips)} skips in ${r.sets.length} set${r.sets.length === 1 ? "" : "s"}.` +
-      (via === "playback" ? " This browser couldn't use the fast decoder, so the video was analysed while playing; the count can be off by a few. Chrome or Safari 16.4+ gives the exact count." : ""));
+      (via === "playback" ? " This browser couldn't use the fast decoder, so the video was analysed while playing; the count can be off by a few. Chrome or Safari 16.4+ gives the exact count." : "") +
+      (s.bodySize < 0.5 ? " You look small in this video, which can add about one skip per set (the swing that starts it). For an exact count, put the phone closer so you fill at least half the frame's height." : ""));
     $("results").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   } catch (e) {
     console.error(e);
