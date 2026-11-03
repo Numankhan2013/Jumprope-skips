@@ -516,7 +516,8 @@ async function analyse(file) {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     videoUrl = URL.createObjectURL(file);
     $("player").src = videoUrl; $("playerCard").hidden = false;
-    setProgress(1, `Done: ${fmtInt(r.skips)} skips in ${r.sets.length} set${r.sets.length === 1 ? "" : "s"}.`);
+    setProgress(1, `Done: ${fmtInt(r.skips)} skips in ${r.sets.length} set${r.sets.length === 1 ? "" : "s"}.` +
+      (via === "playback" ? " This browser couldn't use the fast decoder, so the video was analysed while playing; the count can be off by a few. Chrome or Safari 16.4+ gives the exact count." : ""));
     $("results").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   } catch (e) {
     console.error(e);
