@@ -32,7 +32,10 @@ def test_beginner_with_stumbles_rests_and_walking():
             ("jump", 30, 110), ("walk", 3), ("rest", 3)]
     for seed in range(5):
         r, true = _count(plan, seed=seed)
-        assert abs(r.skips - true) <= 2, (seed, r.skips, true)
+        # ±3: set edges are trimmed when weaker than the set's typical skip
+        # (that's what removes the rope-catch / swing-in bumps in real video),
+        # which occasionally costs a genuinely weak first/last skip here.
+        assert abs(r.skips - true) <= 3, (seed, r.skips, true)
         assert len(r.segments) == 5
         # resting/walking time must not be billed as jumping
         assert r.jumping_seconds < 0.75 * r.total_seconds

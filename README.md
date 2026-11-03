@@ -16,7 +16,7 @@ Those pauses are billed as rest, so they don't inflate your calorie number.
 pip install -r requirements.txt
 ```
 
-(Python 3.9+. The first run downloads a ~9 MB body-tracking model and caches it in `~/.cache/jumprope_counter`.)
+(Python 3.9+. `mediapipe` is only needed if you want `--backend pose`.)
 
 ## Use
 
@@ -71,8 +71,8 @@ python -m jumprope_counter --skips 5000 --minutes 45 --rest-minutes 10 --weight 
 |---|---|
 | `--start 30 --end 1800` | only look at that part of the video (in seconds) |
 | `--sensitivity 1.5` | set it higher if skips are being missed, lower (e.g. `0.7`) if it counts too many |
-| `--model lite/full/heavy` | pose model size: `lite` is about 2× faster, `heavy` is the steadiest. Default is `full` |
-| `--backend motion` | skip body tracking and use plain motion (optical flow). Faster, but needs a very still camera and no one else moving in the shot |
+| `--backend pose` | use MediaPipe body landmarks instead of motion tracking (less accurate in testing, see below) |
+| `--model lite/full/heavy` | pose model size, only for `--backend pose` |
 
 ## Filming tips (these matter more than anything else)
 
@@ -84,16 +84,28 @@ python -m jumprope_counter --skips 5000 --minutes 45 --rest-minutes 10 --weight 
 
 ## How it works
 
-**Counting.** MediaPipe's pose model finds your shoulders and hips in every frame. Their average
-height, measured in torso lengths so camera distance doesn't matter, gives a bounce signal: one
-bump per jump. Then the program:
+**Counting.** Dense optical flow measures how everything in the frame moved since the previous
+frame. Adding up the vertical motion of the moving pixels (that's you) gives a bounce signal: one
+bump per jump. Frames where most of the picture moves are skipped, because that's the camera being
+picked up, not you jumping. Then the program:
 
 1. band-passes that signal to 0.8–5 Hz (48–300 jumps/min), which removes drift and jitter;
 2. finds the stretches where you're actually bouncing, using a rolling amplitude check. Standing,
    fiddling with the rope, and **walking** (going up and down while also moving sideways) are
    thrown out;
 3. counts one skip per bounce peak, with a minimum spacing based on your own cadence so that
-   wobbles aren't counted twice.
+   wobbles aren't counted twice;
+4. rejects bumps much smaller than your typical skip at that point in the video, and trims the
+   weak bump at each end of a set (the swing that starts it, and the hop where the rope catches
+   your feet).
+
+**Tested on real footage.** A 39 s phone clip with two camera angles (upper body only, then
+full body), four rope catches, and two stretches of handling the phone. The ground truth of
+**51 skips** was established independently of the program: slit-scan images, tracking the
+sweater's stripe, the sound of the rope slapping the ground, and frame-by-frame checks of every
+borderline moment. The program scores **51/51**: no misses, no extras, set sizes 19/9/10/5/8
+exactly. MediaPipe pose tracking scored between 5 and 60 on the same clip, which is why motion is
+the default.
 
 On synthetic workouts with known answers (stumbles, rests, walking, 15 fps video, dropped frames)
 it lands within ±1–2 skips per session. A 5,000+ skip session came out under 0.5 % off. See `tests/`.

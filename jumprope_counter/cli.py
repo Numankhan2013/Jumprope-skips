@@ -79,8 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--height", required=True, help="height, e.g. 175cm, 1.75m or 5'9 (default unit cm)")
     p.add_argument("--age", type=float, default=None, help="age in years (improves calorie accuracy; default 30)")
     p.add_argument("--sex", choices=["male", "female"], default=None, help="improves calorie accuracy")
-    p.add_argument("--backend", choices=["auto", "pose", "motion"], default="auto",
-                   help="pose = MediaPipe body tracking (best), motion = plain OpenCV (fallback)")
+    p.add_argument("--backend", choices=["motion", "pose"], default="motion",
+                   help="motion = optical flow (default, most accurate in testing), pose = MediaPipe landmarks")
     p.add_argument("--model", choices=["lite", "full", "heavy"], default="full",
                    help="pose model size: bigger is slower but steadier (default full)")
     p.add_argument("--start", type=float, default=0.0, help="ignore video before this many seconds")
@@ -109,11 +109,11 @@ def main(argv: list[str] | None = None) -> int:
             p.error("give a video file, or use --skips/--minutes")
         print(f"\n  Reading {a.video}", file=sys.stderr)
         kw = dict(start=a.start, end=a.end)
-        if a.backend in ("auto", "pose"):
+        if a.backend == "pose":
             kw["model"] = a.model
         sig = extract(a.video, backend=a.backend, **kw)
         s = max(a.sensitivity, 0.05)
-        result = count_skips(sig.t, sig.y, sig.fps, horizontal=sig.x,
+        result = count_skips(sig.t, sig.y, sig.fps, horizontal=sig.x, valid=sig.valid,
                              min_amplitude=0.012 / s, rel_prominence=min(0.45 / s, 0.9))
         skips, jump_s, rest_s = result.skips, result.jumping_seconds, result.rest_seconds
 

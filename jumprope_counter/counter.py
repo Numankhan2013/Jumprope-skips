@@ -83,6 +83,9 @@ def count_skips(
     min_segment_skips: int = 3,
     horizontal: np.ndarray | None = None,
     max_walk_speed: float = 0.8,
+    typical_fraction: float = 0.4,
+    edge_fraction: float = 0.7,
+    valid: np.ndarray | None = None,
 ) -> CountResult:
     """Count skips.
 
@@ -116,6 +119,13 @@ def count_skips(
         speed = np.abs(np.gradient(xs)) * fps
         active &= uniform_filter1d(speed, win, mode="nearest") < max_walk_speed
 
+    if valid is not None:
+        # e.g. frames where the camera itself was moving; pad by 0.3 s each side
+        bad = ~np.asarray(valid, bool)
+        pad = max(1, int(round(0.3 * fps)))
+        bad = np.convolve(bad.astype(float), np.ones(2 * pad + 1), "same") > 0
+        active &= ~bad
+
     # Merge tiny gaps (a stumble mid-set) and drop blips shorter than ~1 s.
     for s, e in _runs(~active):
         if s > 0 and e < n and (e - s) / fps < merge_gap_s:
@@ -135,15 +145,45 @@ def count_skips(
     # Allow speeding up to ~1.6x the dominant cadence without missing skips.
     distance = max(1, int(0.6 * fps / cadence))
     peaks, props = find_peaks(x, distance=distance, prominence=0)
+    prom = props["prominences"]
     amp = np.sqrt(2.0) * env[peaks]  # sinusoid-equivalent amplitude
-    keep = active[peaks] & (props["prominences"] >= rel_prominence * amp) & (x[peaks] > 0)
+    keep = active[peaks] & (prom >= rel_prominence * amp) & (x[peaks] > 0)
+
+    # A skip must look like *your* skips around that moment: compare each bump
+    # with the typical (75th percentile) bump within ±15 s. Ripples while you
+    # untangle the rope or swing it to start are a fraction of a real jump.
+    if keep.any():
+        tp = t[peaks]
+        ref_t, ref_p = tp[keep], prom[keep]
+        for i in np.flatnonzero(keep):
+            near = np.abs(ref_t - tp[i]) <= 15.0
+            if prom[i] < typical_fraction * np.percentile(ref_p[near], 75):
+                keep[i] = False
     peaks = peaks[keep]
 
+    # Sets = trains of evenly spaced skips. A gap of more than ~1.7 beats
+    # (rope caught, stopped to rest) ends the set.
     segments: list[Segment] = []
     final_peaks: list[int] = []
     period = 1.0 / cadence
-    for s, e in _runs(active):
-        seg_peaks = peaks[(peaks >= s) & (peaks < e)]
+    trains: list[list[int]] = []
+    for p in peaks:
+        if trains and (t[p] - t[trains[-1][-1]]) <= 1.7 * period and active[trains[-1][-1]:p + 1].all():
+            trains[-1].append(p)
+        else:
+            trains.append([p])
+    prom_of = dict(zip(peaks.tolist(), prom[keep].tolist()))
+    for seg in trains:
+        # The swing that starts a set and the hop where the rope catches your
+        # feet are weaker than real skips. Trim set edges below ~70 % of the set's
+        # median bump (one at each end at most: one swing in, one catch).
+        if len(seg) >= min_segment_skips:
+            med = float(np.median([prom_of[p] for p in seg]))
+            if prom_of[seg[0]] < edge_fraction * med:
+                seg = seg[1:]
+            if seg and prom_of[seg[-1]] < edge_fraction * med:
+                seg = seg[:-1]
+        seg_peaks = np.asarray(seg)
         if len(seg_peaks) < min_segment_skips:
             continue
         final_peaks.extend(seg_peaks.tolist())

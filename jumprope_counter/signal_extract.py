@@ -47,6 +47,7 @@ class BodySignal:
     fps: float           # sample rate of t / y
     duration: float      # seconds of video analysed
     backend: str
+    valid: np.ndarray | None = None  # False where the camera itself was moving
 
 
 @dataclass
@@ -193,14 +194,16 @@ def extract_motion(path, *, max_fps=30.0, max_width=240, start=0.0, end=None, pr
     Slow drift from integration is removed later by the band-pass filter.
     """
     prev = None
-    ts, vys, vxs, heights = [], [], [], []
+    ts, vys, vxs, heights, still = [], [], [], [], []
     for t, frame in _frames(path, max_fps, max_width, start, end, progress):
         gray = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (3, 3), 0)
         vy = vx = 0.0
+        frac = 0.0
         if prev is not None:
             flow = cv2.calcOpticalFlowFarneback(prev, gray, None, 0.5, 3, 13, 3, 5, 1.1, 0)
             mag = np.hypot(flow[..., 0], flow[..., 1])
             moving = mag > 0.3
+            frac = float(moving.mean())
             if moving.sum() > 0.001 * mag.size:
                 vy = float(np.median(flow[..., 1][moving]))
                 vx = float(np.median(flow[..., 0][moving]))
@@ -211,22 +214,23 @@ def extract_motion(path, *, max_fps=30.0, max_width=240, start=0.0, end=None, pr
         ts.append(t)
         vys.append(vy)
         vxs.append(vx)
+        # A person fills well under half the frame; if most of it moves, the
+        # camera is being picked up / moved, and nothing there is a skip.
+        still.append(frac < 0.6)
     fps = _effective_fps(path, max_fps)
     t = np.asarray(ts, float)
     body = np.median(heights) if heights else 100.0
     # Express in "torso lengths" (≈ 1/3 of the moving body) to share thresholds with pose.
     unit = max(body / 3.0, 1.0)
     return BodySignal(t=t, y=np.cumsum(vys) / unit, x=np.cumsum(vxs) / unit, fps=fps,
-                      duration=(t[-1] - t[0] + 1 / fps) if len(t) else 0.0, backend="motion")
+                      duration=(t[-1] - t[0] + 1 / fps) if len(t) else 0.0, backend="motion",
+                      valid=np.asarray(still, bool))
 
 
-def extract(path, backend="auto", **kw) -> BodySignal:
-    if backend == "pose" or (backend == "auto" and pose_available()):
-        sig = extract_pose(path, **kw)
-        found = np.isfinite(sig.y).mean() if len(sig.y) else 0.0
-        if backend == "pose" or found >= 0.5:
-            return sig
-        print(f"  pose tracker only found you in {found:.0%} of frames; "
-              "switching to motion tracking", file=sys.stderr)
+def extract(path, backend="motion", **kw) -> BodySignal:
+    # Motion is the default: on real footage of low, fast skips it was far more
+    # accurate than pose landmarks, which are smoothed and jitter at that scale.
+    if backend == "pose":
+        return extract_pose(path, **kw)
     kw.pop("model", None)
     return extract_motion(path, **kw)
