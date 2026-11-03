@@ -25,15 +25,19 @@ scores 51/51 on the test clip in a real browser.
   as they're shown. This runs at real-time speed and is less exact if the phone drops frames.
 - **Check the count:** after analysis you can play your video with the live counter on top.
 
-**Host it yourself for free (Cloudflare Pages):**
+**Live site:** `docs/index.html` is the built, self-contained page. To publish it on GitHub Pages
+(free, gives `https://numankhan2013.github.io/jumprope-skips/`):
 
-```bash
-python web/build.py          # → web/dist/index.html (one self-contained file)
-npx wrangler pages deploy web/dist --project-name skip-count
-```
+1. On GitHub open the repo → **Settings** → **Pages**.
+2. Under *Build and deployment*, set **Source: Deploy from a branch**.
+3. Pick the branch that holds `docs/` and the **/docs** folder, then **Save**.
+4. Wait about a minute and open the URL GitHub shows.
 
-or drag the `web/dist` folder into *Cloudflare dashboard → Workers & Pages → Create → Pages →
-Upload assets*. GitHub Pages or Netlify work too: it's one static file.
+After changing anything in `web/`, rebuild with `python web/build.py` (writes `docs/index.html`).
+
+**Other free hosts** (need your own account): Cloudflare Pages
+(`npx wrangler pages deploy docs --project-name skip-count` → `skip-count.pages.dev`), or Vercel
+(`npx vercel deploy docs --prod` → `*.vercel.app`). It's one static file, so any static host works.
 
 ## Install (command line)
 

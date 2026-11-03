@@ -62,6 +62,7 @@ button, .pick {
 button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .pick { font-family: var(--display); font-size: 1.4rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 18px; }
 .pick input { display: none; }
+.pick:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
 .note { font-size: 0.85rem; color: var(--muted); margin: 0; }
 details summary { cursor: pointer; font-weight: 600; }
 details ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
@@ -93,94 +94,118 @@ details ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 .player .overlay { position: absolute; top: 10px; left: 12px; font-family: var(--display); font-weight: 800; font-size: 3rem; line-height: 1; color: #fff; text-shadow: 0 2px 6px #000, 0 0 2px #000; pointer-events: none; font-variant-numeric: tabular-nums; }
 .player .overlay.flash { color: #ffb38f; }
 .error { color: var(--rope); font-weight: 600; margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.center { text-align: center; }
+.hero { gap: 12px; }
+.pick { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; color: #fff; }
+.label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); margin: 0 0 6px; font-family: var(--body); }
+.hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+.you { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 14px; margin: 0; background: var(--bg); transition: border-color 0.3s; }
+.you legend { font-weight: 600; font-size: 0.9rem; padding: 0 6px; }
+.you-hint { margin: 0 0 10px; }
+.you input, .you select { background: var(--surface); }
+.you-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.flabel { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+.sexbox { display: flex; flex-direction: column; gap: 4px; }
+.seg label { background: var(--surface); }
+.updated { font-size: 0.8rem; font-weight: 600; color: var(--good); opacity: 0; transition: opacity 0.3s; align-self: center; }
+.updated.show { opacity: 1; }
+.kcal .num.flash { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { color: var(--rope); transform: scale(1.08); } 100% { color: var(--ink); transform: scale(1); } }
+.kcal .num { display: inline-block; transform-origin: left bottom; }
+.manual { gap: 12px; }
+.manual summary { font-weight: 600; }
+.manual[open] summary { margin-bottom: 4px; }
 footer { color: var(--muted); font-size: 0.85rem; }
 footer p { margin: 0 0 8px; }
 @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.2rem; } }
-@media (prefers-reduced-motion: reduce) { .progress div { transition: none; } }
+@media (max-width: 360px) { .you-grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .progress div, .updated { transition: none; } .kcal .num.flash { animation: none; } }
 </style>
 
 <main>
   <header>
     <h1>Skip <span>Count</span></h1>
-    <p class="lede">Film your jump-rope session, pick the video, and get your skip count and the calories you burned. Everything runs on this phone. Your video is never uploaded.</p>
+    <p class="lede">Count your jump-rope skips from a video and see the calories you burned.</p>
   </header>
 
-  <section class="card" aria-labelledby="you-h">
-    <h2 id="you-h">You</h2>
-    <div class="row">
-      <label for="weight">Weight
-        <span class="field"><input id="weight" type="number" inputmode="decimal" min="20" max="300" step="0.1" value="70">
-        <select id="weightUnit" aria-label="Weight unit"><option value="kg">kg</option><option value="lb">lb</option></select></span>
-      </label>
-      <label for="heightCm" id="heightCmWrap">Height
-        <span class="field"><input id="heightCm" type="number" inputmode="decimal" min="100" max="250" value="175">
-        <select id="heightUnit" aria-label="Height unit"><option value="cm">cm</option><option value="ft">ft/in</option></select></span>
-      </label>
-      <label for="heightFt" id="heightFtWrap" hidden>Height
-        <span class="field"><input id="heightFt" type="number" inputmode="numeric" min="3" max="8" value="5" aria-label="Feet">
-        <input id="heightIn" type="number" inputmode="decimal" min="0" max="11.9" value="9" aria-label="Inches">
-        <select id="heightUnit2" aria-label="Height unit"><option value="cm">cm</option><option value="ft" selected>ft/in</option></select></span>
-      </label>
-    </div>
-    <div class="row">
-      <label for="age">Age
-        <input id="age" type="number" inputmode="numeric" min="10" max="100" value="25">
-      </label>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <span class="tag" style="text-transform:none;letter-spacing:0;font-size:0.85rem">Sex</span>
-        <div class="seg" role="radiogroup" aria-label="Sex">
-          <label><input type="radio" name="sex" id="sexM" value="male" checked>Male</label>
-          <label><input type="radio" name="sex" id="sexF" value="female">Female</label>
-        </div>
-      </div>
-    </div>
-    <p class="note">Saved on this phone only. Height, age and sex set your resting metabolism, which scales the calorie estimate.</p>
-  </section>
-
-  <section class="card" aria-labelledby="vid-h">
-    <h2 id="vid-h">Workout video</h2>
-    <label class="pick" for="file">Choose video<input id="file" type="file" accept="video/*"></label>
-    <details>
-      <summary>Filming tips</summary>
-      <ul>
-        <li>Prop the phone up. Don't hold it.</li>
-        <li>Stand close enough to fill at least half the frame's height. Head and shoulders must stay in frame; full body is fine too.</li>
-        <li>Be the only person moving in the shot.</li>
-        <li>Any surface or place works: grass, concrete, indoors. Sound isn't used.</li>
-        <li>A wobbly or vibrating phone is handled, and moments when you pick it up are ignored.</li>
-      </ul>
-    </details>
+  <section class="card hero" aria-labelledby="vid-h">
+    <h2 id="vid-h" class="sr-only">Your video</h2>
+    <label class="pick" for="file">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg>
+      Choose skipping video<input id="file" type="file" accept="video/*">
+    </label>
+    <p class="note center">Your video stays on this phone. Nothing is uploaded.</p>
     <div id="progressBox" hidden>
       <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="progressBar"><div></div></div>
       <p class="note" id="progressText" aria-live="polite">Starting…</p>
     </div>
     <p class="error" id="error" hidden></p>
+    <details>
+      <summary>How to film it</summary>
+      <ul>
+        <li>Prop the phone up so it stays put.</li>
+        <li>Stand close enough to fill at least half the height of the picture. Keep your head and shoulders in frame.</li>
+        <li>Be the only person moving in the shot.</li>
+        <li>Any place works: grass, concrete, indoors. Sound isn't used.</li>
+      </ul>
+    </details>
   </section>
 
   <section class="card" id="results" aria-labelledby="res-h">
     <span class="example" id="exampleTag">Example: a 39-second test clip, counted by hand at 51</span>
-    <h2 id="res-h" class="tag">Skips</h2>
-    <div class="score"><span class="num" id="skips">51</span><span class="unit">skips</span></div>
+    <div class="score"><span class="num" id="skips">51</span><span class="unit" id="res-h">skips</span></div>
     <div class="stats">
       <div class="stat"><b id="sJump">0:20</b><span>jumping</span></div>
-      <div class="stat"><b id="sRest">0:19</b><span>resting</span></div>
       <div class="stat"><b id="sPace">156</b><span>skips / min</span></div>
       <div class="stat"><b id="sSets">5</b><span>sets</span></div>
+      <div class="stat"><b id="sRest">0:19</b><span>resting</span></div>
       <div class="stat"><b id="sBest">19</b><span>best set</span></div>
       <div class="stat"><b id="sLen">0:39</b><span>video length</span></div>
     </div>
     <div>
-      <p class="tag" style="margin:0 0 6px">Sets <span style="text-transform:none;letter-spacing:0">(tap one to zoom in)</span></p>
+      <p class="label">Sets <span class="hint">tap one to zoom in</span></p>
       <div class="sets" id="sets"></div>
     </div>
     <canvas class="chart" id="chart" aria-label="Bounce signal with each counted skip marked"></canvas>
     <div class="legend"><span><i style="background:var(--track)"></i>your bounce</span><span><i style="background:var(--rope)"></i>counted skip</span><span><i style="background:var(--rope-soft)"></i>set</span></div>
   </section>
 
-  <section class="card" aria-labelledby="cal-h">
-    <h2 id="cal-h" class="tag">Calories burned</h2>
-    <div class="kcal"><span class="num" id="kTotal">5</span><span class="unit">kcal</span></div>
+  <section class="card" id="calCard" aria-labelledby="cal-h">
+    <h2 id="cal-h" class="label">Calories burned</h2>
+    <div class="kcal"><span class="num" id="kTotal">5</span><span class="unit">kcal</span><span class="updated" id="updated" role="status" aria-live="polite"></span></div>
     <p class="note" id="kRange">Likely range 4–6 kcal</p>
+
+    <fieldset class="you" id="you">
+      <legend>Based on you</legend>
+      <p class="hint you-hint">Change any of these and the calories update right away.</p>
+      <div class="you-grid">
+        <label for="weight">Weight
+          <span class="field"><input id="weight" type="number" inputmode="decimal" min="20" max="300" step="0.1" value="70">
+          <select id="weightUnit" aria-label="Weight unit"><option value="kg">kg</option><option value="lb">lb</option></select></span>
+        </label>
+        <label for="heightCm" id="heightCmWrap">Height
+          <span class="field"><input id="heightCm" type="number" inputmode="decimal" min="100" max="250" value="175">
+          <select id="heightUnit" aria-label="Height unit"><option value="cm">cm</option><option value="ft">ft/in</option></select></span>
+        </label>
+        <label for="heightFt" id="heightFtWrap" hidden>Height
+          <span class="field"><input id="heightFt" type="number" inputmode="numeric" min="3" max="8" value="5" aria-label="Feet">
+          <input id="heightIn" type="number" inputmode="decimal" min="0" max="11.9" value="9" aria-label="Inches">
+          <select id="heightUnit2" aria-label="Height unit"><option value="cm">cm</option><option value="ft" selected>ft/in</option></select></span>
+        </label>
+        <label for="age">Age
+          <input id="age" type="number" inputmode="numeric" min="10" max="100" value="25">
+        </label>
+        <div class="sexbox">
+          <span class="flabel">Sex</span>
+          <div class="seg" role="radiogroup" aria-label="Sex">
+            <label><input type="radio" name="sex" id="sexM" value="male" checked>Male</label>
+            <label><input type="radio" name="sex" id="sexF" value="female">Female</label>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
     <dl class="lines">
       <dt>While jumping</dt><dd id="kJump">4 kcal</dd>
       <dt>During rests</dt><dd id="kRest">1 kcal</dd>
@@ -193,30 +218,30 @@ footer p { margin: 0 0 8px; }
       <ul>
         <li>Intensity comes from your measured pace: rope jumping is 8.8 MET under 100 skips/min, 11.8 at 100–120, and 12.3 at 120–160 (Compendium of Physical Activities).</li>
         <li>One MET is set to <em>your</em> resting metabolism from weight, height, age and sex (Mifflin-St Jeor), not a textbook average.</li>
-        <li>Rest time between sets counts at 2 MET. Any MET-based estimate is about ±15% for one person, hence the range.</li>
+        <li>Rest time between sets counts at 2 MET. Any estimate like this is about ±15% for one person, hence the range.</li>
       </ul>
     </details>
   </section>
 
   <section class="card" id="playerCard" aria-labelledby="pl-h" hidden>
-    <h2 id="pl-h" class="tag">Check the count</h2>
+    <h2 id="pl-h" class="label">Check the count</h2>
     <div class="player"><video id="player" controls playsinline muted></video><div class="overlay" id="overlay">0</div></div>
-    <p class="note">Play your video with the counter on top. If the number goes up on every jump, the total is right.</p>
+    <p class="note">Play your video with the counter on top. If it goes up on every jump, the total is right.</p>
   </section>
 
-  <section class="card" aria-labelledby="man-h">
-    <h2 id="man-h">Already know your count?</h2>
+  <details class="card manual">
+    <summary>Already know your count? Get calories without a video</summary>
     <div class="row">
-      <label for="mSkips">Skips<input id="mSkips" type="number" inputmode="numeric" min="1" placeholder="5000"></label>
-      <label for="mMin">Minutes jumping<input id="mMin" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="45"></label>
-      <label for="mRest">Minutes resting<input id="mRest" type="number" inputmode="decimal" min="0" step="0.1" placeholder="10"></label>
+      <label for="mSkips">Skips<input id="mSkips" type="number" inputmode="numeric" min="1" placeholder="e.g. 5000"></label>
+      <label for="mMin">Minutes jumping<input id="mMin" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="e.g. 45"></label>
+      <label for="mRest">Minutes resting<input id="mRest" type="number" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 10"></label>
     </div>
-    <button id="mGo" type="button">Work out calories</button>
-  </section>
+    <button id="mGo" type="button">Show calories</button>
+  </details>
 
   <footer>
-    <p><strong>How it counts.</strong> Tracks how the moving part of the picture (you) goes up and down from frame to frame, finds the rhythm of your jumps, and counts one skip per bounce. Pauses, the swing that starts a set, the hop where the rope catches your feet, and moments when the phone itself moves are left out.</p>
-    <p>Processing speed depends on your phone; expect roughly a third to a half of the video's length. Keep this screen open while it works.</p>
+    <p><strong>How it counts.</strong> It follows how you move up and down from frame to frame, finds the rhythm of your jumps, and counts one skip per bounce. Pauses, the swing that starts a set, the hop where the rope catches your feet, and moments when the phone moves are left out.</p>
+    <p>Analysis runs in your browser and takes roughly a third to half of the video's length. Keep the screen on while it works.</p>
   </footer>
 </main>
 
@@ -260,16 +285,19 @@ function profile() {
 const fmtTime = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
 const fmtInt = n => Math.round(n).toLocaleString();
+const fmtKcal = n => n < 20 ? (Math.round(n * 10) / 10).toLocaleString() : fmtInt(n); // short clips: show a decimal
 
 // ---------------------------------------------------------------- results
 let last = null; // { result, fps, duration }
+let calSource = null; // what the calories are for: { skips, jumpS, restS }
 function renderCalories(skips, jumpS, restS) {
+  calSource = { skips, jumpS, restS };
   const p = profile(), c = SkipCore.calories(skips, jumpS, restS, p.kg, p.cm, p.age, p.sex);
-  $("kTotal").textContent = fmtInt(c.total);
-  $("kRange").textContent = `Likely range ${fmtInt(c.low)}–${fmtInt(c.high)} kcal`;
-  $("kJump").textContent = `${fmtInt(c.jumping)} kcal`;
-  $("kRest").textContent = `${fmtInt(c.rest)} kcal`;
-  $("kNet").textContent = `${fmtInt(c.net)} kcal`;
+  $("kTotal").textContent = fmtKcal(c.total);
+  $("kRange").textContent = `Likely range ${fmtKcal(c.low)}–${fmtKcal(c.high)} kcal`;
+  $("kJump").textContent = `${fmtKcal(c.jumping)} kcal`;
+  $("kRest").textContent = `${fmtKcal(c.rest)} kcal`;
+  $("kNet").textContent = `${fmtKcal(c.net)} kcal`;
   $("kMet").textContent = `${c.met.toFixed(1)} MET`;
   $("kRmr").textContent = `${fmtInt(c.rmr)} kcal/day`;
 }
@@ -547,20 +575,47 @@ async function analyse(file) {
 
 // ---------------------------------------------------------------- wiring
 loadProfile();
-for (const id of profileIds) $(id).addEventListener("change", () => { saveProfile(); if (last) renderCalories(last.skips, last.jumpingSeconds, last.restSeconds); });
-document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener("change", () => { saveProfile(); if (last) renderCalories(last.skips, last.jumpingSeconds, last.restSeconds); }));
-for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change", e => {
-  const p = profile(); showHeightUnit(e.target.value);
-  if (e.target.value === "cm") $("heightCm").value = Math.round(p.cm);
-  else { const inches = p.cm / 2.54; $("heightFt").value = Math.floor(inches / 12); $("heightIn").value = Math.round(inches % 12); }
+
+// Changing your details recalculates straight away, with a visible confirmation.
+let updatedTimer = 0, lastKcal = null;
+function profileChanged() {
   saveProfile();
+  if (!calSource) return;
+  const before = $("kTotal").textContent;
+  renderCalories(calSource.skips, calSource.jumpS, calSource.restS);
+  const p = profile(), wUnit = $("weightUnit").value;
+  const w = wUnit === "lb" ? `${Math.round(p.kg / 0.45359237)} lb` : `${Math.round(p.kg * 10) / 10} kg`;
+  const h = $("heightUnit").value === "cm" ? `${Math.round(p.cm)} cm` : `${$("heightFt").value}′${$("heightIn").value}″`;
+  $("updated").textContent = `✓ Updated for ${w} · ${h} · ${p.age} · ${p.sex}`;
+  $("updated").classList.add("show");
+  if ($("kTotal").textContent !== before) { const n = $("kTotal"); n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); }
+  clearTimeout(updatedTimer);
+  updatedTimer = setTimeout(() => $("updated").classList.remove("show"), 3500);
+}
+for (const id of ["weight", "heightCm", "heightFt", "heightIn", "age"]) $(id).addEventListener("input", profileChanged);
+document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener("change", profileChanged));
+$("weightUnit").addEventListener("change", e => { // convert, so switching units doesn't change your weight
+  const v = parseFloat($("weight").value);
+  if (v > 0) $("weight").value = e.target.value === "lb" ? Math.round(v / 0.45359237) : Math.round(v * 0.45359237 * 10) / 10;
+  profileChanged();
+});
+let heightUnitNow = $("heightUnit").value;
+for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change", e => {
+  // read the height in the unit it was entered in, then convert
+  const cm = heightUnitNow === "cm" ? parseFloat($("heightCm").value) || 175
+    : (parseFloat($("heightFt").value) || 0) * 30.48 + (parseFloat($("heightIn").value) || 0) * 2.54;
+  heightUnitNow = e.target.value; showHeightUnit(e.target.value);
+  if (e.target.value === "cm") $("heightCm").value = Math.round(cm);
+  else { const inches = cm / 2.54; let ft = Math.floor(inches / 12), inch = Math.round(inches - ft * 12); if (inch === 12) { ft++; inch = 0; } $("heightFt").value = ft; $("heightIn").value = inch; }
+  profileChanged();
 });
 $("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyse(f); });
 $("mGo").addEventListener("click", () => {
   const skips = parseInt($("mSkips").value, 10), min = parseFloat($("mMin").value), rest = parseFloat($("mRest").value) || 0;
   if (!(skips > 0) || !(min > 0)) { $("mSkips").reportValidity(); return; }
   renderCalories(skips, min * 60, rest * 60);
-  $("kTotal").scrollIntoView({ behavior: "smooth", block: "center" });
+  $("updated").textContent = `✓ For ${fmtInt(skips)} skips in ${min} min`; $("updated").classList.add("show");
+  $("calCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 });
 
 // Example: the verified 39 s test clip (51 skips by hand count), so the page opens with real numbers.
