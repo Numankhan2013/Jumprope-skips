@@ -1,0 +1,134 @@
+# Jump Rope Skip Counter 🪢
+
+Film yourself skipping, then run one command. You get back:
+
+- **how many skips** you did (plus how many sets, your longest streak, and your pace)
+- **how long** you were actually jumping and how long you spent resting
+- **how many calories** you burned, worked out from your skip rate, jumping time, weight, height, age and sex
+
+It's meant for long sessions (thousands of skips) and for people who trip on the rope a lot. Every
+time the rope catches, you stop, and you start again, the counter notices and starts a new set.
+Those pauses are billed as rest, so they don't inflate your calorie number.
+
+## Install
+
+```bash
+pip install -r requirements.txt
+```
+
+(Python 3.9+. The first run downloads a ~9 MB body-tracking model and caches it in `~/.cache/jumprope_counter`.)
+
+## Use
+
+```bash
+python -m jumprope_counter my_workout.mp4 --weight 70kg --height 175cm --age 25 --sex male
+```
+
+Units are flexible: `--weight 154lb`, `--height 5'9`, `--height 1.75m` all work.
+
+```
+  ── Skips ─────────────────────────────────
+  Total skips      : 5132
+  Sets             : 41  (87, 12, 230, 64, …)
+  Best set         : 412 in a row
+  Video length     : 58:10
+  Time jumping     : 46:02
+  Time resting     : 12:08
+  Pace (jumping)   : 111 skips/min
+  Tracker          : pose
+
+  ── Calories ──────────────────────────────
+  You              : 70.0 kg, 175 cm, age 25, male
+  Resting burn     : 1674 kcal/day (Mifflin-St Jeor)
+  Intensity        : 11.8 MET while jumping
+  Jumping          : 633 kcal
+  Rests            : 28 kcal
+  TOTAL burned     : 661 kcal   (likely range 562–760)
+  Extra vs. resting: 593 kcal
+```
+*(illustrative numbers)*
+
+### Check the count yourself
+
+```bash
+python -m jumprope_counter my_workout.mp4 --weight 70 --height 175 \
+    --annotate checked.mp4   # copy of your video with a live counter in the corner
+    --plot bounce.png        # graph of your bounce with every counted skip marked
+    --csv skips.csv          # timestamp of every skip
+```
+
+Watch `checked.mp4` for a minute. If the number goes up on every jump, you can trust the total.
+
+### Already know your count? Skip the video
+
+```bash
+python -m jumprope_counter --skips 5000 --minutes 45 --rest-minutes 10 --weight 70 --height 175
+```
+
+### Other options
+
+| flag | what it does |
+|---|---|
+| `--start 30 --end 1800` | only look at that part of the video (in seconds) |
+| `--sensitivity 1.5` | set it higher if skips are being missed, lower (e.g. `0.7`) if it counts too many |
+| `--model lite/full/heavy` | pose model size: `lite` is about 2× faster, `heavy` is the steadiest. Default is `full` |
+| `--backend motion` | skip body tracking and use plain motion (optical flow). Faster, but needs a very still camera and no one else moving in the shot |
+
+## Filming tips (these matter more than anything else)
+
+1. **Use a still camera.** Prop the phone up; don't hand-hold it.
+2. **Keep your whole body in the frame**, head to feet, with some space above your head for the jump.
+3. **Be the only person moving** in the shot.
+4. Normal 30 fps is plenty. Light that's good enough to see you clearly is good enough.
+5. Shoot from the front or side, whichever you like.
+
+## How it works
+
+**Counting.** MediaPipe's pose model finds your shoulders and hips in every frame. Their average
+height, measured in torso lengths so camera distance doesn't matter, gives a bounce signal: one
+bump per jump. Then the program:
+
+1. band-passes that signal to 0.8–5 Hz (48–300 jumps/min), which removes drift and jitter;
+2. finds the stretches where you're actually bouncing, using a rolling amplitude check. Standing,
+   fiddling with the rope, and **walking** (going up and down while also moving sideways) are
+   thrown out;
+3. counts one skip per bounce peak, with a minimum spacing based on your own cadence so that
+   wobbles aren't counted twice.
+
+On synthetic workouts with known answers (stumbles, rests, walking, 15 fps video, dropped frames)
+it lands within ±1–2 skips per session. A 5,000+ skip session came out under 0.5 % off. See `tests/`.
+
+**Calories.** Calculated in three steps:
+
+1. **Intensity from your real pace.** The *Compendium of Physical Activities* rates rope jumping
+   at 8.8 MET for slow skipping (<100/min), 11.8 for moderate (100–120/min) and 12.3 for fast
+   (120–160/min). The program blends between these using the pace measured from your video,
+   counting only the time you were actually jumping.
+2. **Your own metabolism, not a textbook average.** The usual "1 MET = 3.5 ml O₂/kg/min" is
+   too high for most adults. So the program estimates *your* resting burn from weight, **height**,
+   age and sex (Mifflin-St Jeor) and scales the MET by that. This is the "corrected MET" method
+   (Kozey et al., 2010), and it's the step that uses your height.
+   `kcal = MET × resting kcal/day ÷ 1440 × minutes`
+3. **Rests count at a lower rate.** Pauses are billed at 2 MET (standing and recovering), not at
+   jumping intensity.
+
+"Extra vs. resting" subtracts what you'd have burned sitting still for the same time. Use that
+number if you're tracking food intake against exercise.
+
+**Accuracy, honestly:** the skip count can be close to exact with good footage. The calorie figure
+is limited by science, not by this code: any estimate from weight, height and activity is about
+±15–20 % for an individual, which is why the program prints a range. A chest-strap heart-rate
+monitor is the only cheap way to do better.
+
+## A note on a short rope
+
+If your rope is too short you'll find yourself tucking your knees or hopping twice per turn. The
+counter counts **jumps** (times you leave the ground), so a double-bounce counts as two. That
+matches the energy you spent, but not the number of rope turns. A common rule for rope length:
+stand on the middle of the rope and the handles should reach your armpits.
+
+## Run the tests
+
+```bash
+pip install pytest && python -m pytest tests
+```
