@@ -41,6 +41,9 @@ if "--fragment" not in sys.argv:
     for f in (here / "icons").glob("*.png"):
         shutil.copy(f, dest.parent / "icons" / f.name)
     shutil.copy(here / "manifest.webmanifest", dest.parent / "manifest.webmanifest")
-    build = hashlib.sha1(out.encode()).hexdigest()[:10]
+    h = hashlib.sha1(out.encode())
+    for f in sorted((here / "icons").glob("*.png")) + [here / "manifest.webmanifest", here / "sw.js"]:
+        h.update(f.read_bytes())
+    build = h.hexdigest()[:10]
     (dest.parent / "sw.js").write_text((here / "sw.js").read_text().replace("__BUILD__", build))
 print(dest, len(out), "bytes")

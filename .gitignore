@@ -11,3 +11,6 @@ __pycache__/
 *.avi
 *.png
 *.csv
+# ...but the app's own icons must ship
+!web/icons/*.png
+!docs/icons/*.png
