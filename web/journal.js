@@ -183,7 +183,7 @@
       catch (e) { console.warn("Cloud sync failed", e); set(navigator.onLine ? "error" : "offline", e?.message || String(e)); }
       finally { busy = false; if (again) { again = false; setTimeout(() => run(false), 300); } }
     }
-    function set(s, e = "") { status = s; err = e; paint(); }
+    function set(s, e = "") { status = s; err = e; paint(); try { root.onCloudStatus?.(s, user); } catch {} }
     function paint() {
       const t = el("cloudText"); if (!t) return;
       const msg = {
@@ -218,7 +218,7 @@
         user = u ? { uid: u.uid, email: u.email || "" } : null; pushed.clear(); pushedMeta = ""; lastPull = 0;
         if (u) run(true); else set("signed-out");
       });
-      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && user && Date.now() - lastPull > 5 * 60000) run(true); });
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && user && Date.now() - lastPull > 30000) run(true); });
       addEventListener("online", () => { if (user) run(true); });
     }
     return { init, signIn, signOut, schedule, syncNow: () => run(true), paint };
