@@ -5,7 +5,9 @@ from pathlib import Path
 here = Path(__file__).parent
 html = (here / "index.html").read_text()
 core = (here / "core.js").read_text()
+journal = (here / "journal.js").read_text()
 out = html.replace('<script src="core.js"></script>', "<script>\n" + core + "\n</script>")
+out = out.replace('<script src="journal.js"></script>', "<script>\n" + journal + "\n</script>")
 if "--fragment" not in sys.argv:
     # a complete standalone document (for GitHub Pages / Cloudflare Pages / any static host)
     head = (

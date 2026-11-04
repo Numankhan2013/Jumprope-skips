@@ -39,6 +39,21 @@ After changing anything in `web/`, rebuild with `python web/build.py` (writes `d
 (`npx wrangler pages deploy docs --project-name skip-count` → `skip-count.pages.dev`), or Vercel
 (`npx vercel deploy docs --prod` → `*.vercel.app`). It's one static file, so any static host works.
 
+## History, insights and cloud sync
+
+After counting a video (or typing in a session under *Already know your count?*), tap **Save to
+history**. The **Your history** card then shows skips today / this week / this month / all time,
+your day streak, best set ever, recent pace, a 14-day bar chart, short insights (vs. last week,
+pace trend, biggest day) and every saved session (tap × to delete).
+
+Sessions live on your phone first. Under **Cloud sync**, sign in with Google to back them up to
+Firebase (project `chasing-greatness`, free Spark plan) and see them on every device. Data sits in
+`users/{uid}/skips/{id}` plus `users/{uid}/skipmeta/state` (profile and deletions); Firestore rules
+let only you read or write your own data. Merging is newest-edit-wins per session, and deletions
+sync too. Sign-in works on `numankhan2013.github.io` (an authorized domain in Firebase Auth).
+
+The logic is in `web/journal.js`, which `web/build.py` inlines into `docs/index.html`.
+
 ## Install (command line)
 
 ```bash

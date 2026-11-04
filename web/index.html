@@ -116,6 +116,21 @@ details ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
 .manual { gap: 12px; }
 .manual summary { font-weight: 600; }
 .manual[open] summary { margin-bottom: 4px; }
+.save-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.tiles .stat b { font-size: 1.5rem; }
+.bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; height: 110px; align-items: end; }
+.bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; min-width: 0; }
+.bar i { display: block; width: 100%; background: var(--rope); border-radius: 4px 4px 0 0; min-height: 0; }
+.bar span { font-size: 0.7rem; color: var(--muted); line-height: 1; }
+.insights { margin: 0; padding-left: 18px; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
+.sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sessions li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.sessions b { font-family: var(--display); font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.sessions .del { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 4px 11px; border-radius: 99px; font-size: 1.1rem; flex: none; }
+.btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.btns button { flex: 1; min-width: 130px; }
+@media (max-width: 380px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
 footer { color: var(--muted); font-size: 0.85rem; }
 footer p { margin: 0 0 8px; }
 @media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.2rem; } }
@@ -229,6 +244,49 @@ footer p { margin: 0 0 8px; }
     <p class="note">Play your video with the counter on top. If it goes up on every jump, the total is right.</p>
   </section>
 
+  <section class="card" id="saveCard" aria-labelledby="save-h" hidden>
+    <h2 id="save-h" class="label">Save this session</h2>
+    <p class="note" id="saveSummary"></p>
+    <div class="save-row">
+      <label for="saveDate">Date<input id="saveDate" type="date"></label>
+      <label for="saveNote">Note (optional)<input id="saveNote" type="text" maxlength="140" placeholder="e.g. double unders"></label>
+    </div>
+    <button id="saveBtn" type="button">Save to history</button>
+  </section>
+
+  <section class="card" id="history" aria-labelledby="hist-h">
+    <h2 id="hist-h">Your history</h2>
+    <p class="note" id="histEmpty">Count a video or type in a session, then tap Save. Your totals, streaks and pace show up here.</p>
+    <div id="histBody" hidden>
+      <div class="tiles">
+        <div class="stat"><b id="hToday">0</b><span>today</span></div>
+        <div class="stat"><b id="hWeek">0</b><span>this week</span></div>
+        <div class="stat"><b id="hMonth">0</b><span>this month</span></div>
+        <div class="stat"><b id="hAll">0</b><span>all time</span></div>
+        <div class="stat"><b id="hStreak">0</b><span id="hStreakSub">day streak</span></div>
+        <div class="stat"><b id="hBestSet">0</b><span>best set ever</span></div>
+        <div class="stat"><b id="hPace">–</b><span>skips/min, last 5</span></div>
+      </div>
+      <p class="label" style="margin-top:16px">Last 14 days</p>
+      <div class="bars" id="hBars" aria-label="Skips per day over the last 14 days"></div>
+      <p class="label" style="margin-top:16px">Insights</p>
+      <ul class="insights" id="hLines"></ul>
+      <p class="label" style="margin-top:16px">Sessions</p>
+      <ul class="sessions" id="hList"></ul>
+      <button class="ghost" id="hMore" type="button" hidden>Show all</button>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="cloud-h">
+    <h2 id="cloud-h" class="label">Cloud sync</h2>
+    <p class="note" id="cloudText">Loading…</p>
+    <div class="btns">
+      <button id="cloudIn" type="button" hidden>Sign in with Google</button>
+      <button id="cloudSync" class="ghost" type="button" hidden>Sync now</button>
+      <button id="cloudOut" class="ghost" type="button" hidden>Sign out</button>
+    </div>
+  </section>
+
   <details class="card manual">
     <summary>Already know your count? Get calories without a video</summary>
     <div class="row">
@@ -246,6 +304,9 @@ footer p { margin: 0 0 8px; }
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="core.js"></script>
 <script>
 "use strict";
@@ -268,6 +329,7 @@ function saveProfile() {
   const p = {}; for (const id of profileIds) p[id] = $(id).value;
   p.sex = document.querySelector('input[name="sex"]:checked').value;
   store.set("skipcount.profile", JSON.stringify(p));
+  window.SkipJournal?.touchProfile();
 }
 function showHeightUnit(u) {
   $("heightUnit").value = u; $("heightUnit2").value = u;
@@ -542,6 +604,7 @@ async function analyse(file) {
     r.fps = fps;
     window.__skipDebug = { via, frames: out.tracker.ts.length, fps, bodySize: s.bodySize, skipTimes: r.skipTimes };
     renderResult(r, false);
+    window.SkipJournal?.offer({ source: "video", skips: r.skips, sets: r.sets.map(x => x.skips), jumpS: r.jumpingSeconds, restS: r.restSeconds, when: file.lastModified || Date.now() });
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     videoUrl = URL.createObjectURL(file);
     $("player").src = videoUrl; $("playerCard").hidden = false;
@@ -614,6 +677,7 @@ $("mGo").addEventListener("click", () => {
   const skips = parseInt($("mSkips").value, 10), min = parseFloat($("mMin").value), rest = parseFloat($("mRest").value) || 0;
   if (!(skips > 0) || !(min > 0)) { $("mSkips").reportValidity(); return; }
   renderCalories(skips, min * 60, rest * 60);
+  window.SkipJournal?.offer({ source: "manual", skips, sets: [], jumpS: min * 60, restS: rest * 60, when: Date.now() });
   $("updated").textContent = `✓ For ${fmtInt(skips)} skips in ${min} min`; $("updated").classList.add("show");
   $("calCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 });
@@ -632,3 +696,5 @@ $("mGo").addEventListener("click", () => {
     totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps }, true);
 })();
 </script>
+<script src="journal.js"></script>
+
