@@ -1,0 +1,23 @@
+{
+  "name": "Skip Count",
+  "short_name": "Skip Count",
+  "description": "Count jump-rope skips from your pocket, the camera or a video, and track calories and consistency.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f7f6",
+  "theme_color": "#ef5a24",
+  "categories": ["fitness", "health"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Pocket session", "short_name": "Pocket", "url": "./?start=pocket", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Insights", "url": "./#insights", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

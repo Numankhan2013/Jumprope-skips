@@ -3,6 +3,13 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ef5a24">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Skip Count">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23ef5a24%27/%3E%3Cpath d=%27M7 22c4-14 14-14 18 0%27 fill=%27none%27 stroke=%27white%27 stroke-width=%273%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 <meta charset="utf-8">
@@ -336,7 +343,7 @@ details.card[open] > summary::after { content: "–"; }
 <body>
 <div class="wrap">
   <div class="topbar">
-    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 17c3-12 11-12 14 0"/><path d="M5 17v3M19 17v3"/></svg></div>
+    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7.6 10.2C8.6 17 10 21.4 12 21.4s3.4-4.4 4.4-11.2"/><path d="M6.4 2.8l1 7.4M17.6 2.8l-1 7.4" stroke-width="3.6"/></svg></div>
     <span class="brand">Skip Count</span>
     <span class="spacer"></span>
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch between light and dark" style="order:2"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
@@ -522,6 +529,11 @@ details.card[open] > summary::after { content: "–"; }
 <aside class="sheet" id="profileSheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h" hidden>
   <div class="sheet-head"><h2 id="sheet-h">Profile</h2><button class="icon-btn" id="sheetClose" type="button" aria-label="Close">✕</button></div>
   <div class="sheet-body">
+    <div class="card" id="installCard" hidden>
+      <p class="label">App</p>
+      <p class="hint" id="installText">Install Skip Count to open it from your home screen like any other app. It works offline too.</p>
+      <div class="row-actions"><button class="btn btn-accent btn-small" id="installBtn" type="button" hidden>Install app</button></div>
+    </div>
     <div class="card">
       <p class="label">Account</p>
       <p class="hint" id="cloudText">Loading…</p>
@@ -2309,6 +2321,26 @@ window.onCloudStatus = (status, user) => {
   else { a.classList.remove("in"); txt.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.4-3.8 4.2-5.6 7.5-5.6s6.1 1.8 7.5 5.6"/></svg>'; a.title = ""; }
 };
 
+// ================================================================ install as an app
+// Chrome/Edge/Android: offer the real install prompt. iPhone/iPad: explain Share > Add to Home Screen.
+let installEvt = null;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isiOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function paintInstall() {
+  const card = $("installCard"), btn = $("installBtn");
+  if (standalone()) { card.hidden = true; return; }
+  if (installEvt) { card.hidden = false; btn.hidden = false; $("installText").textContent = "Install Skip Count to open it from your home screen like any other app. It works offline too."; return; }
+  if (isiOS) { card.hidden = false; btn.hidden = true; $("installText").innerHTML = "To add Skip Count to your home screen: tap <b>Share</b> (the square with an arrow) in Safari, then <b>Add to Home Screen</b>."; return; }
+  card.hidden = true;
+}
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; paintInstall(); });
+addEventListener("appinstalled", () => { installEvt = null; paintInstall(); toast("Installed. Open Skip Count from your home screen."); });
+$("installBtn").onclick = async () => { if (!installEvt) return; const e = installEvt; installEvt = null; e.prompt(); try { await e.userChoice; } catch {} paintInstall(); };
+paintInstall();
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("Service worker not registered:", e)));
+}
+
 // ================================================================ wiring
 loadProfile();
 let updatedTimer = 0;
@@ -2404,6 +2436,7 @@ renderBased();
 window.loadProfile = () => { loadProfile(); renderBased(); renderHome(); if (calSource) renderCalories(calSource.skips, calSource.jumpS, calSource.restS); };
 window.renderCalories = renderCalories;
 checkUnfinished();
+if (new URLSearchParams(location.search).get("start") === "pocket") { try { history.replaceState(null, "", location.pathname); } catch {} setTimeout(openPocket, 300); }
 renderHome();
 showTab(location.hash === "#insights" ? "insights" : "count", false);
 document.fonts?.ready.then(() => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });

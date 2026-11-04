@@ -14,6 +14,13 @@ if "--fragment" not in sys.argv:
         '<!doctype html>\n<html lang="en">\n<head>\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
         '<meta name="theme-color" content="#ef5a24">\n'
+        '<link rel="manifest" href="manifest.webmanifest">\n'
+        '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">\n'
+        '<meta name="apple-mobile-web-app-capable" content="yes">\n'
+        '<meta name="mobile-web-app-capable" content="yes">\n'
+        '<meta name="apple-mobile-web-app-title" content="Skip Count">\n'
+        '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n'
+        '<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">\n'
         '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E'
         '%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23ef5a24%27/%3E%3Cpath d=%27M7 22c4-14 14-14 18 0%27 '
         'fill=%27none%27 stroke=%27white%27 stroke-width=%273%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">\n'
@@ -26,4 +33,14 @@ args = [a for a in sys.argv[1:] if not a.startswith("--")]
 dest = Path(args[0]) if args else here.parent / "docs" / "index.html"
 dest.parent.mkdir(parents=True, exist_ok=True)
 dest.write_text(out)
+if "--fragment" not in sys.argv:
+    # installable app: manifest, icons and a service worker stamped with this build's hash
+    import hashlib
+    import shutil
+    (dest.parent / "icons").mkdir(exist_ok=True)
+    for f in (here / "icons").glob("*.png"):
+        shutil.copy(f, dest.parent / "icons" / f.name)
+    shutil.copy(here / "manifest.webmanifest", dest.parent / "manifest.webmanifest")
+    build = hashlib.sha1(out.encode()).hexdigest()[:10]
+    (dest.parent / "sw.js").write_text((here / "sw.js").read_text().replace("__BUILD__", build))
 print(dest, len(out), "bytes")

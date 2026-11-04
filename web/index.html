@@ -328,7 +328,7 @@ details.card[open] > summary::after { content: "–"; }
 
 <div class="wrap">
   <div class="topbar">
-    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 17c3-12 11-12 14 0"/><path d="M5 17v3M19 17v3"/></svg></div>
+    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7.6 10.2C8.6 17 10 21.4 12 21.4s3.4-4.4 4.4-11.2"/><path d="M6.4 2.8l1 7.4M17.6 2.8l-1 7.4" stroke-width="3.6"/></svg></div>
     <span class="brand">Skip Count</span>
     <span class="spacer"></span>
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch between light and dark" style="order:2"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
@@ -514,6 +514,11 @@ details.card[open] > summary::after { content: "–"; }
 <aside class="sheet" id="profileSheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h" hidden>
   <div class="sheet-head"><h2 id="sheet-h">Profile</h2><button class="icon-btn" id="sheetClose" type="button" aria-label="Close">✕</button></div>
   <div class="sheet-body">
+    <div class="card" id="installCard" hidden>
+      <p class="label">App</p>
+      <p class="hint" id="installText">Install Skip Count to open it from your home screen like any other app. It works offline too.</p>
+      <div class="row-actions"><button class="btn btn-accent btn-small" id="installBtn" type="button" hidden>Install app</button></div>
+    </div>
     <div class="card">
       <p class="label">Account</p>
       <p class="hint" id="cloudText">Loading…</p>

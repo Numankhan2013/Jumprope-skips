@@ -680,6 +680,26 @@ window.onCloudStatus = (status, user) => {
   else { a.classList.remove("in"); txt.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.4-3.8 4.2-5.6 7.5-5.6s6.1 1.8 7.5 5.6"/></svg>'; a.title = ""; }
 };
 
+// ================================================================ install as an app
+// Chrome/Edge/Android: offer the real install prompt. iPhone/iPad: explain Share > Add to Home Screen.
+let installEvt = null;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isiOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function paintInstall() {
+  const card = $("installCard"), btn = $("installBtn");
+  if (standalone()) { card.hidden = true; return; }
+  if (installEvt) { card.hidden = false; btn.hidden = false; $("installText").textContent = "Install Skip Count to open it from your home screen like any other app. It works offline too."; return; }
+  if (isiOS) { card.hidden = false; btn.hidden = true; $("installText").innerHTML = "To add Skip Count to your home screen: tap <b>Share</b> (the square with an arrow) in Safari, then <b>Add to Home Screen</b>."; return; }
+  card.hidden = true;
+}
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; paintInstall(); });
+addEventListener("appinstalled", () => { installEvt = null; paintInstall(); toast("Installed. Open Skip Count from your home screen."); });
+$("installBtn").onclick = async () => { if (!installEvt) return; const e = installEvt; installEvt = null; e.prompt(); try { await e.userChoice; } catch {} paintInstall(); };
+paintInstall();
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(e => console.warn("Service worker not registered:", e)));
+}
+
 // ================================================================ wiring
 loadProfile();
 let updatedTimer = 0;
@@ -775,6 +795,7 @@ renderBased();
 window.loadProfile = () => { loadProfile(); renderBased(); renderHome(); if (calSource) renderCalories(calSource.skips, calSource.jumpS, calSource.restS); };
 window.renderCalories = renderCalories;
 checkUnfinished();
+if (new URLSearchParams(location.search).get("start") === "pocket") { try { history.replaceState(null, "", location.pathname); } catch {} setTimeout(openPocket, 300); }
 renderHome();
 showTab(location.hash === "#insights" ? "insights" : "count", false);
 document.fonts?.ready.then(() => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });
