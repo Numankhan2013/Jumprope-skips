@@ -31,3 +31,9 @@ def test_js_engine_matches_python(tmp_path):
     assert abs(js["skips"] - true) <= 2, (js["skips"], true)
     assert abs(py.skips - true) <= 2, (py.skips, true)
     assert abs(js["skips"] - py.skips) <= 1
+
+
+def test_pocket_mode_counts_synthetic_accelerometer_workouts():
+    """Phone-in-pocket counting on simulated sensor data: exact sets, walking ignored."""
+    r = subprocess.run(["node", str(ROOT / "web" / "test_accel.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

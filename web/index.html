@@ -58,11 +58,6 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .icon-btn { width: 40px; height: 40px; border-radius: 99px; background: transparent; color: var(--ink); display: grid; place-items: center; }
 .icon-btn:hover { background: var(--sunken); }
 
-/* greeting */
-.hello { margin-top: 10px; }
-.hello .date { color: var(--muted); font-size: 0.95rem; }
-.hello h1 { font-size: 2rem; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
-
 /* cards */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
@@ -83,47 +78,80 @@ button:active, .btn:active { transform: scale(.96); }
 :focus-visible { outline: 3px solid var(--track); outline-offset: 2px; }
 .btn:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
 
-/* streak strip */
-.streak { flex-direction: row; align-items: center; gap: 12px; padding: 14px; }
-.streak .count { min-width: 0; }
-.flame { width: 44px; height: 44px; border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); flex: none; transition: background-color .3s, color .3s; }
-.flame.on { background: var(--rope-soft); color: var(--rope); }
-.streak .count { font-size: 2rem; font-weight: 700; line-height: 1; white-space: nowrap; }
-.streak .count small { font-size: 0.95rem; font-weight: 500; color: var(--muted); margin-left: 5px; font-family: var(--body); }
-.week { margin-left: auto; display: flex; gap: 5px; flex: none; }
-.week div { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.66rem; color: var(--muted); font-weight: 600; }
-.week i { width: 18px; height: 18px; border-radius: 99px; border: 1.5px dashed var(--line); display: block; }
-.week i.done { border: 0; background: var(--rope); }
-.week i.today { border: 2px solid var(--ink); }
-.week i.done.today { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+/* page heading (Insights) */
+.hello { margin-top: 10px; }
+.hello .date { color: var(--muted); font-size: 0.95rem; }
+.hello h1 { font-size: 2rem; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
 
-/* hero */
-.hero { background: var(--hero); color: var(--hero-ink); border: 0; position: relative; overflow: hidden; padding: 22px; gap: 16px; }
-.hero::after { content: ""; position: absolute; inset: 0 0 auto auto; width: 60%; height: 70%; pointer-events: none;
-  background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1.3px); background-size: 14px 14px;
-  -webkit-mask-image: linear-gradient(225deg, #000 10%, transparent 70%); mask-image: linear-gradient(225deg, #000 10%, transparent 70%); }
-.hero > * { position: relative; z-index: 1; }
-.hero .kicker { color: rgba(245,245,244,.62); font-size: 0.92rem; }
-.hero h2 { font-size: 1.45rem; letter-spacing: -0.02em; font-weight: 650; line-height: 1.25; }
-.hero .actions { display: grid; gap: 10px; }
-.hero .actions .btn { width: 100%; padding: 16px; font-size: 1.02rem; }
-.hero .foot { color: rgba(245,245,244,.55); font-size: 0.82rem; margin: 0; }
+/* today scoreboard */
+.today { background: linear-gradient(150deg, #f26a2e 0%, #e2481a 100%); color: #fff; border-radius: 22px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; margin-top: 8px; }
+.today::before { content: ""; position: absolute; right: -40px; bottom: -70px; width: 230px; height: 230px; border-radius: 50%; border: 18px solid rgba(255,255,255,.08); pointer-events: none; }
+.today > * { position: relative; }
+.today-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.today-date { font-weight: 600; font-size: 0.95rem; opacity: .92; }
+.streak-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(0,0,0,.18); padding: 4px 10px; border-radius: 99px; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.today-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.today-num { font-size: 5.6rem; line-height: .82; font-weight: 800; letter-spacing: -0.01em; }
+.today-goal { font-size: 0.9rem; opacity: .92; margin-top: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.goal-btn { background: rgba(255,255,255,.18); color: #fff; padding: 2px 9px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; }
+#goalInput { width: 6.5rem; padding: 3px 8px; border-radius: 8px; border: 0; font: inherit; font-size: 0.85rem; color: #111; }
+.weekbars { display: grid; grid-template-columns: repeat(7, 12px); gap: 5px; height: 64px; align-items: end; flex: none; }
+.weekbars div { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.weekbars i { flex: none; width: 12px; border-radius: 4px; background: rgba(255,255,255,.95); min-height: 3px; transform-origin: bottom; transform: scaleY(0); transition: transform .6s var(--spring); }
+.weekbars i.nil { background: rgba(255,255,255,.3); }
+.weekbars.in i { transform: scaleY(1); }
+.weekbars em { font-style: normal; font-size: 0.62rem; opacity: .85; font-weight: 600; line-height: 1; }
+.weekbars .now em { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+.goal-track { height: 8px; border-radius: 99px; background: rgba(0,0,0,.18); overflow: hidden; }
+.goal-track i { display: block; height: 100%; width: 0; background: #fff; border-radius: 99px; transition: width .9s var(--spring); }
+.today-sub { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; opacity: .95; }
+.today-sub b { font-family: var(--display); font-size: 1.15rem; font-weight: 700; margin-right: 2px; }
+
+/* ways to count */
+.modes { display: flex; flex-direction: column; gap: 10px; }
+.mode { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 14px; cursor: pointer; position: relative; transition: transform .2s var(--spring), border-color .2s, box-shadow .2s; }
+.mode:hover { border-color: color-mix(in srgb, var(--rope) 45%, var(--line)); }
+.mode:active { transform: scale(.98); }
+.mode:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
+.mode input[type=file] { display: none; }
+.mode-ic { width: 46px; height: 46px; border-radius: 13px; background: var(--rope-soft); color: var(--rope); display: grid; place-items: center; flex: none; }
+.mode-txt { display: flex; flex-direction: column; min-width: 0; }
+.mode-txt b { font-size: 1.05rem; font-weight: 650; }
+.mode-txt span { color: var(--muted); font-size: 0.88rem; line-height: 1.35; }
+.mode-tag { position: absolute; top: -9px; right: 12px; background: var(--ink); color: var(--bg); font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+.error { color: #c62828; font-weight: 600; margin: 0; }
+details.tips summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; font-weight: 500; }
+details.tips ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px; }
+details.tips b { color: var(--ink); }
+
+/* active session (video progress / live camera) */
+.session { background: var(--hero); color: var(--hero-ink); border: 0; }
+.session .foot { color: rgba(245,245,244,.6); font-size: 0.82rem; margin: 10px 0 0; }
 .progress-wrap { display: flex; flex-direction: column; gap: 10px; }
 .progress-big { font-family: var(--display); font-size: 3.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .progress { height: 8px; background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: var(--rope); border-radius: 99px; transition: width .35s var(--ease-out); }
 .progress-text { color: rgba(245,245,244,.72); font-size: 0.9rem; margin: 0; }
-.error { color: #ff9b74; font-weight: 600; margin: 0; }
-details.tips summary { cursor: pointer; color: rgba(245,245,244,.82); font-size: 0.9rem; }
-details.tips ul { margin: 8px 0 0; padding-left: 18px; color: rgba(245,245,244,.7); font-size: 0.9rem; }
-
-/* live */
+.resume { border-color: var(--rope); }
 .live { position: relative; border-radius: 14px; overflow: hidden; background: #000; }
 .live video { width: 100%; max-height: 62vh; display: block; object-fit: cover; }
 .live .big { position: absolute; left: 14px; top: 6px; font-family: var(--display); font-weight: 800; font-size: 5.4rem; line-height: 1; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 .live .time { position: absolute; right: 12px; top: 12px; background: rgba(0,0,0,.55); color: #fff; border-radius: 99px; padding: 3px 10px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-.live .rec { width: 8px; height: 8px; background: #ff4d4d; border-radius: 99px; display: inline-block; margin-right: 6px; animation: blink 1.2s infinite; }
+.rec { width: 8px; height: 8px; background: #ff4d4d; border-radius: 99px; display: inline-block; margin-right: 6px; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .2; } }
+
+/* pocket screen: pure black (saves battery on OLED), hold to stop so a pocket can't */
+.pocket { position: fixed; inset: 0; z-index: 50; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); user-select: none; -webkit-user-select: none; touch-action: none; }
+.pocket-top { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 6px; color: rgba(255,255,255,.7); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.pocket-state { margin-left: 8px; padding: 2px 9px; border-radius: 99px; background: rgba(255,255,255,.1); font-size: 0.78rem; }
+.pocket-count { font-size: min(34vw, 13rem); font-weight: 800; line-height: .85; color: #ff7a45; }
+.pocket-label { font-family: var(--display); font-size: 1.6rem; text-transform: uppercase; letter-spacing: .06em; color: rgba(255,255,255,.75); }
+.pocket-hint { color: rgba(255,255,255,.55); font-size: 0.9rem; max-width: 30ch; margin: 18px 0 6px; }
+.pocket-say { display: flex; gap: 8px; align-items: center; color: rgba(255,255,255,.7); font-size: 0.9rem; }
+.hold { position: absolute; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); width: 96px; height: 96px; border-radius: 50%; background: rgba(255,255,255,.08); color: #fff; font-weight: 600; font-size: 0.85rem; display: grid; place-items: center; }
+.hold span:last-child { position: relative; width: 60px; line-height: 1.2; }
+.hold .ring { position: absolute; inset: -4px; border-radius: 50%; background: conic-gradient(#ff7a45 calc(var(--p, 0) * 1%), transparent 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); }
 
 /* results */
 .example { align-self: flex-start; background: var(--rope-soft); color: var(--ink); border-radius: 99px; padding: 3px 10px; font-size: 0.8rem; font-weight: 600; }
@@ -254,8 +282,8 @@ details.card[open] > summary::after { content: "–"; }
   body { padding-left: 96px; }
   .toast { bottom: 24px; }
 }
-@media (max-width: 430px) { .streak .count small { display: block; margin: 4px 0 0; font-size: 0.8rem; } .streak .count { font-size: 1.8rem; } .flame { width: 40px; height: 40px; } }
-@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.4rem; } .you-grid, .row3 { grid-template-columns: 1fr; } .week { gap: 3px; } .week i { width: 17px; height: 17px; } .streak .count { font-size: 1.7rem; } }
+@media (max-width: 380px) { .today-num { font-size: 4.6rem; } .weekbars { grid-template-columns: repeat(7, 10px); gap: 4px; } .weekbars i { width: 10px; } }
+@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.4rem; } .you-grid, .row3 { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation: none !important; }
   .bars .col i { transform: none; }
@@ -272,29 +300,50 @@ details.card[open] > summary::after { content: "–"; }
 
   <!-- ======================= COUNT ======================= -->
   <section class="view" id="view-count" aria-label="Count">
-    <div class="hello"><div class="date" id="today"></div><h1 id="greet">Ready to skip?</h1></div>
-
-    <div class="card streak" id="streakCard">
-      <div class="flame" id="flame" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 5.5 6 11a6 6 0 0 1-12 0c0-2.6 1.4-4.6 2.6-5.8.3 1.9 1.4 3 2.4 3.3C10.3 7.4 12 2 12 2z"/></svg></div>
-      <div class="count num" id="streakNum">0<small>day streak</small></div>
-      <div class="week" id="weekDots" aria-label="Days skipped this week"></div>
+    <div class="today" id="todayCard">
+      <div class="today-top">
+        <span class="today-date" id="todayDate">Today</span>
+        <span class="streak-chip" id="streakChip" title="Days in a row with skipping"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2s6 5.5 6 11a6 6 0 0 1-12 0c0-2.6 1.4-4.6 2.6-5.8.3 1.9 1.4 3 2.4 3.3C10.3 7.4 12 2 12 2z"/></svg><span id="streakNum">0</span> day streak</span>
+      </div>
+      <div class="today-main">
+        <div>
+          <div class="today-num num" id="todaySkips">0</div>
+          <div class="today-goal">skips today · <button type="button" class="goal-btn" id="goalBtn">goal <span id="goalNum">1,000</span></button><input id="goalInput" type="number" inputmode="numeric" min="10" step="50" aria-label="Daily goal in skips" hidden></div>
+        </div>
+        <div class="weekbars" id="weekBars" aria-label="Skips each day this week"></div>
+      </div>
+      <div class="goal-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="goalTrack"><i id="goalFill"></i></div>
+      <div class="today-sub"><span><b id="todayKcal">0</b> kcal</span><span><b id="todayMin">0</b> min jumping</span><span><b id="todaySess">0</b> sessions</span></div>
     </div>
 
-    <div class="card hero" id="hero">
-      <div id="heroIdle">
-        <div class="kicker">Count a session</div>
-        <h2>Pick a video, or count live while you skip</h2>
-      </div>
-      <div class="actions" id="heroActions">
-        <label class="btn btn-light" for="file">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg>
-          Choose a video<input id="file" type="file" accept="video/*">
-        </label>
-        <button class="btn btn-ghost-dark" id="liveBtn" type="button">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></svg>
-          Count live with the camera
-        </button>
-      </div>
+    <div class="section-head"><h2>Count a session</h2></div>
+    <div class="modes" id="modes">
+      <button type="button" class="mode" id="pocketBtn">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M3 9c-1 2-1 4 0 6M21 9c1 2 1 4 0 6"/></svg></span>
+        <span class="mode-txt"><b>Pocket</b><span>Phone in your pocket. No camera, no waiting.</span></span>
+        <span class="mode-tag">Best for long sessions</span>
+      </button>
+      <button type="button" class="mode" id="liveBtn">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg></span>
+        <span class="mode-txt"><b>Live camera</b><span>Prop the phone up. It counts as you skip.</span></span>
+      </button>
+      <label class="mode" for="file">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg></span>
+        <span class="mode-txt"><b>Video</b><span>Count a video you already recorded.</span></span>
+        <input id="file" type="file" accept="video/*">
+      </label>
+    </div>
+    <p class="error" id="error" hidden></p>
+    <details class="tips" id="tips">
+      <summary>Tips</summary>
+      <ul>
+        <li><b>Pocket:</b> a snug trouser pocket, waistband or armband works best. Keep the screen on; the app keeps it awake.</li>
+        <li><b>Camera and video:</b> prop the phone up, fill at least half the picture's height, and be the only one moving.</li>
+        <li>Everything runs on this phone. Nothing is uploaded.</li>
+      </ul>
+    </details>
+
+    <div class="card session" id="sessionCard" hidden>
       <div class="progress-wrap" id="progressBox" hidden>
         <div class="progress-big" id="progressPct">0%</div>
         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="progressBar"><div></div></div>
@@ -302,24 +351,19 @@ details.card[open] > summary::after { content: "–"; }
       </div>
       <div id="liveBox" hidden>
         <div class="live"><video id="liveVideo" playsinline muted autoplay></video><div class="big" id="liveCount">0</div><div class="time"><span class="rec"></span><span id="liveTime">0:00</span></div></div>
-        <div class="actions" style="margin-top:12px"><button class="btn btn-accent" id="liveStop" type="button">Stop and save</button></div>
-        <p class="foot" style="margin-top:10px">Prop the phone up so it sees you from the shoulders up. The number updates every couple of seconds; the final count is worked out when you stop.</p>
+        <button class="btn btn-accent" id="liveStop" type="button" style="width:100%;margin-top:12px">Stop and save</button>
+        <p class="foot">Prop the phone up so it sees you from the shoulders up. The number updates every couple of seconds; the final count is worked out when you stop.</p>
       </div>
-      <p class="error" id="error" hidden></p>
-      <details class="tips" id="tips">
-        <summary>How to film it</summary>
-        <ul>
-          <li>Prop the phone up so it stays put.</li>
-          <li>Fill at least half the height of the picture. Head and shoulders must stay in frame.</li>
-          <li>Be the only person moving in the shot. Any place works; sound isn't used.</li>
-          <li>For long sessions, count live: there's nothing to process afterwards.</li>
-        </ul>
-      </details>
-      <p class="foot" id="heroFoot">Everything runs on this phone. Nothing is uploaded.</p>
+    </div>
+
+    <div class="card resume" id="resumeCard" hidden>
+      <p style="margin:0"><b>Unfinished pocket session</b><br><span class="hint" id="resumeText"></span></p>
+      <div class="row-actions"><button class="btn btn-accent btn-small" id="resumeSave" type="button">Save it</button><button class="btn btn-ghost btn-small" id="resumeDrop" type="button">Discard</button></div>
     </div>
 
     <section class="card" id="results" aria-label="Result">
       <span class="example" id="exampleTag">Example: a 39-second test clip, counted by hand at 51</span>
+      <p class="label" id="resultLabel" hidden>Last session</p>
       <div class="score"><span class="num" id="skips">51</span><span class="unit">skips</span></div>
       <div class="saved" id="savedRow" hidden>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
@@ -466,6 +510,15 @@ details.card[open] > summary::after { content: "–"; }
       </div>
     </div>
   </section>
+</div>
+
+<div class="pocket" id="pocket" hidden role="dialog" aria-modal="true" aria-label="Pocket counting">
+  <div class="pocket-top"><span class="rec"></span><span id="pocketTime">0:00</span><span class="pocket-state" id="pocketState">Counting</span></div>
+  <div class="pocket-count num" id="pocketCount">0</div>
+  <div class="pocket-label">skips</div>
+  <p class="pocket-hint" id="pocketHint">Put the phone in your pocket and start skipping. Keep the screen on.</p>
+  <label class="pocket-say"><input type="checkbox" id="sayHundreds"> Say every 100 out loud</label>
+  <button type="button" class="hold" id="pocketStop"><span class="ring" id="holdRing"></span><span>Hold to stop</span></button>
 </div>
 
 <nav class="tabbar" aria-label="Sections">

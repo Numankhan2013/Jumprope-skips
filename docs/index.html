@@ -64,11 +64,6 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .icon-btn { width: 40px; height: 40px; border-radius: 99px; background: transparent; color: var(--ink); display: grid; place-items: center; }
 .icon-btn:hover { background: var(--sunken); }
 
-/* greeting */
-.hello { margin-top: 10px; }
-.hello .date { color: var(--muted); font-size: 0.95rem; }
-.hello h1 { font-size: 2rem; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
-
 /* cards */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
@@ -89,47 +84,80 @@ button:active, .btn:active { transform: scale(.96); }
 :focus-visible { outline: 3px solid var(--track); outline-offset: 2px; }
 .btn:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
 
-/* streak strip */
-.streak { flex-direction: row; align-items: center; gap: 12px; padding: 14px; }
-.streak .count { min-width: 0; }
-.flame { width: 44px; height: 44px; border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); flex: none; transition: background-color .3s, color .3s; }
-.flame.on { background: var(--rope-soft); color: var(--rope); }
-.streak .count { font-size: 2rem; font-weight: 700; line-height: 1; white-space: nowrap; }
-.streak .count small { font-size: 0.95rem; font-weight: 500; color: var(--muted); margin-left: 5px; font-family: var(--body); }
-.week { margin-left: auto; display: flex; gap: 5px; flex: none; }
-.week div { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.66rem; color: var(--muted); font-weight: 600; }
-.week i { width: 18px; height: 18px; border-radius: 99px; border: 1.5px dashed var(--line); display: block; }
-.week i.done { border: 0; background: var(--rope); }
-.week i.today { border: 2px solid var(--ink); }
-.week i.done.today { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+/* page heading (Insights) */
+.hello { margin-top: 10px; }
+.hello .date { color: var(--muted); font-size: 0.95rem; }
+.hello h1 { font-size: 2rem; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
 
-/* hero */
-.hero { background: var(--hero); color: var(--hero-ink); border: 0; position: relative; overflow: hidden; padding: 22px; gap: 16px; }
-.hero::after { content: ""; position: absolute; inset: 0 0 auto auto; width: 60%; height: 70%; pointer-events: none;
-  background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1.3px); background-size: 14px 14px;
-  -webkit-mask-image: linear-gradient(225deg, #000 10%, transparent 70%); mask-image: linear-gradient(225deg, #000 10%, transparent 70%); }
-.hero > * { position: relative; z-index: 1; }
-.hero .kicker { color: rgba(245,245,244,.62); font-size: 0.92rem; }
-.hero h2 { font-size: 1.45rem; letter-spacing: -0.02em; font-weight: 650; line-height: 1.25; }
-.hero .actions { display: grid; gap: 10px; }
-.hero .actions .btn { width: 100%; padding: 16px; font-size: 1.02rem; }
-.hero .foot { color: rgba(245,245,244,.55); font-size: 0.82rem; margin: 0; }
+/* today scoreboard */
+.today { background: linear-gradient(150deg, #f26a2e 0%, #e2481a 100%); color: #fff; border-radius: 22px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 12px; position: relative; overflow: hidden; margin-top: 8px; }
+.today::before { content: ""; position: absolute; right: -40px; bottom: -70px; width: 230px; height: 230px; border-radius: 50%; border: 18px solid rgba(255,255,255,.08); pointer-events: none; }
+.today > * { position: relative; }
+.today-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.today-date { font-weight: 600; font-size: 0.95rem; opacity: .92; }
+.streak-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(0,0,0,.18); padding: 4px 10px; border-radius: 99px; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.today-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.today-num { font-size: 5.6rem; line-height: .82; font-weight: 800; letter-spacing: -0.01em; }
+.today-goal { font-size: 0.9rem; opacity: .92; margin-top: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.goal-btn { background: rgba(255,255,255,.18); color: #fff; padding: 2px 9px; border-radius: 99px; font-size: 0.85rem; font-weight: 600; }
+#goalInput { width: 6.5rem; padding: 3px 8px; border-radius: 8px; border: 0; font: inherit; font-size: 0.85rem; color: #111; }
+.weekbars { display: grid; grid-template-columns: repeat(7, 12px); gap: 5px; height: 64px; align-items: end; flex: none; }
+.weekbars div { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.weekbars i { flex: none; width: 12px; border-radius: 4px; background: rgba(255,255,255,.95); min-height: 3px; transform-origin: bottom; transform: scaleY(0); transition: transform .6s var(--spring); }
+.weekbars i.nil { background: rgba(255,255,255,.3); }
+.weekbars.in i { transform: scaleY(1); }
+.weekbars em { font-style: normal; font-size: 0.62rem; opacity: .85; font-weight: 600; line-height: 1; }
+.weekbars .now em { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+.goal-track { height: 8px; border-radius: 99px; background: rgba(0,0,0,.18); overflow: hidden; }
+.goal-track i { display: block; height: 100%; width: 0; background: #fff; border-radius: 99px; transition: width .9s var(--spring); }
+.today-sub { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; opacity: .95; }
+.today-sub b { font-family: var(--display); font-size: 1.15rem; font-weight: 700; margin-right: 2px; }
+
+/* ways to count */
+.modes { display: flex; flex-direction: column; gap: 10px; }
+.mode { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 16px; padding: 14px; cursor: pointer; position: relative; transition: transform .2s var(--spring), border-color .2s, box-shadow .2s; }
+.mode:hover { border-color: color-mix(in srgb, var(--rope) 45%, var(--line)); }
+.mode:active { transform: scale(.98); }
+.mode:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
+.mode input[type=file] { display: none; }
+.mode-ic { width: 46px; height: 46px; border-radius: 13px; background: var(--rope-soft); color: var(--rope); display: grid; place-items: center; flex: none; }
+.mode-txt { display: flex; flex-direction: column; min-width: 0; }
+.mode-txt b { font-size: 1.05rem; font-weight: 650; }
+.mode-txt span { color: var(--muted); font-size: 0.88rem; line-height: 1.35; }
+.mode-tag { position: absolute; top: -9px; right: 12px; background: var(--ink); color: var(--bg); font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+.error { color: #c62828; font-weight: 600; margin: 0; }
+details.tips summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; font-weight: 500; }
+details.tips ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 0.9rem; display: flex; flex-direction: column; gap: 4px; }
+details.tips b { color: var(--ink); }
+
+/* active session (video progress / live camera) */
+.session { background: var(--hero); color: var(--hero-ink); border: 0; }
+.session .foot { color: rgba(245,245,244,.6); font-size: 0.82rem; margin: 10px 0 0; }
 .progress-wrap { display: flex; flex-direction: column; gap: 10px; }
 .progress-big { font-family: var(--display); font-size: 3.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .progress { height: 8px; background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: var(--rope); border-radius: 99px; transition: width .35s var(--ease-out); }
 .progress-text { color: rgba(245,245,244,.72); font-size: 0.9rem; margin: 0; }
-.error { color: #ff9b74; font-weight: 600; margin: 0; }
-details.tips summary { cursor: pointer; color: rgba(245,245,244,.82); font-size: 0.9rem; }
-details.tips ul { margin: 8px 0 0; padding-left: 18px; color: rgba(245,245,244,.7); font-size: 0.9rem; }
-
-/* live */
+.resume { border-color: var(--rope); }
 .live { position: relative; border-radius: 14px; overflow: hidden; background: #000; }
 .live video { width: 100%; max-height: 62vh; display: block; object-fit: cover; }
 .live .big { position: absolute; left: 14px; top: 6px; font-family: var(--display); font-weight: 800; font-size: 5.4rem; line-height: 1; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 .live .time { position: absolute; right: 12px; top: 12px; background: rgba(0,0,0,.55); color: #fff; border-radius: 99px; padding: 3px 10px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
-.live .rec { width: 8px; height: 8px; background: #ff4d4d; border-radius: 99px; display: inline-block; margin-right: 6px; animation: blink 1.2s infinite; }
+.rec { width: 8px; height: 8px; background: #ff4d4d; border-radius: 99px; display: inline-block; margin-right: 6px; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .2; } }
+
+/* pocket screen: pure black (saves battery on OLED), hold to stop so a pocket can't */
+.pocket { position: fixed; inset: 0; z-index: 50; background: #000; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center;
+  padding: calc(24px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px)); user-select: none; -webkit-user-select: none; touch-action: none; }
+.pocket-top { position: absolute; top: calc(18px + env(safe-area-inset-top, 0px)); left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 6px; color: rgba(255,255,255,.7); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.pocket-state { margin-left: 8px; padding: 2px 9px; border-radius: 99px; background: rgba(255,255,255,.1); font-size: 0.78rem; }
+.pocket-count { font-size: min(34vw, 13rem); font-weight: 800; line-height: .85; color: #ff7a45; }
+.pocket-label { font-family: var(--display); font-size: 1.6rem; text-transform: uppercase; letter-spacing: .06em; color: rgba(255,255,255,.75); }
+.pocket-hint { color: rgba(255,255,255,.55); font-size: 0.9rem; max-width: 30ch; margin: 18px 0 6px; }
+.pocket-say { display: flex; gap: 8px; align-items: center; color: rgba(255,255,255,.7); font-size: 0.9rem; }
+.hold { position: absolute; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); width: 96px; height: 96px; border-radius: 50%; background: rgba(255,255,255,.08); color: #fff; font-weight: 600; font-size: 0.85rem; display: grid; place-items: center; }
+.hold span:last-child { position: relative; width: 60px; line-height: 1.2; }
+.hold .ring { position: absolute; inset: -4px; border-radius: 50%; background: conic-gradient(#ff7a45 calc(var(--p, 0) * 1%), transparent 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); }
 
 /* results */
 .example { align-self: flex-start; background: var(--rope-soft); color: var(--ink); border-radius: 99px; padding: 3px 10px; font-size: 0.8rem; font-weight: 600; }
@@ -260,8 +288,8 @@ details.card[open] > summary::after { content: "–"; }
   body { padding-left: 96px; }
   .toast { bottom: 24px; }
 }
-@media (max-width: 430px) { .streak .count small { display: block; margin: 4px 0 0; font-size: 0.8rem; } .streak .count { font-size: 1.8rem; } .flame { width: 40px; height: 40px; } }
-@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.4rem; } .you-grid, .row3 { grid-template-columns: 1fr; } .week { gap: 3px; } .week i { width: 17px; height: 17px; } .streak .count { font-size: 1.7rem; } }
+@media (max-width: 380px) { .today-num { font-size: 4.6rem; } .weekbars { grid-template-columns: repeat(7, 10px); gap: 4px; } .weekbars i { width: 10px; } }
+@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.4rem; } .you-grid, .row3 { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0s !important; animation: none !important; }
   .bars .col i { transform: none; }
@@ -280,29 +308,50 @@ details.card[open] > summary::after { content: "–"; }
 
   <!-- ======================= COUNT ======================= -->
   <section class="view" id="view-count" aria-label="Count">
-    <div class="hello"><div class="date" id="today"></div><h1 id="greet">Ready to skip?</h1></div>
-
-    <div class="card streak" id="streakCard">
-      <div class="flame" id="flame" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 5.5 6 11a6 6 0 0 1-12 0c0-2.6 1.4-4.6 2.6-5.8.3 1.9 1.4 3 2.4 3.3C10.3 7.4 12 2 12 2z"/></svg></div>
-      <div class="count num" id="streakNum">0<small>day streak</small></div>
-      <div class="week" id="weekDots" aria-label="Days skipped this week"></div>
+    <div class="today" id="todayCard">
+      <div class="today-top">
+        <span class="today-date" id="todayDate">Today</span>
+        <span class="streak-chip" id="streakChip" title="Days in a row with skipping"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2s6 5.5 6 11a6 6 0 0 1-12 0c0-2.6 1.4-4.6 2.6-5.8.3 1.9 1.4 3 2.4 3.3C10.3 7.4 12 2 12 2z"/></svg><span id="streakNum">0</span> day streak</span>
+      </div>
+      <div class="today-main">
+        <div>
+          <div class="today-num num" id="todaySkips">0</div>
+          <div class="today-goal">skips today · <button type="button" class="goal-btn" id="goalBtn">goal <span id="goalNum">1,000</span></button><input id="goalInput" type="number" inputmode="numeric" min="10" step="50" aria-label="Daily goal in skips" hidden></div>
+        </div>
+        <div class="weekbars" id="weekBars" aria-label="Skips each day this week"></div>
+      </div>
+      <div class="goal-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="goalTrack"><i id="goalFill"></i></div>
+      <div class="today-sub"><span><b id="todayKcal">0</b> kcal</span><span><b id="todayMin">0</b> min jumping</span><span><b id="todaySess">0</b> sessions</span></div>
     </div>
 
-    <div class="card hero" id="hero">
-      <div id="heroIdle">
-        <div class="kicker">Count a session</div>
-        <h2>Pick a video, or count live while you skip</h2>
-      </div>
-      <div class="actions" id="heroActions">
-        <label class="btn btn-light" for="file">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg>
-          Choose a video<input id="file" type="file" accept="video/*">
-        </label>
-        <button class="btn btn-ghost-dark" id="liveBtn" type="button">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></svg>
-          Count live with the camera
-        </button>
-      </div>
+    <div class="section-head"><h2>Count a session</h2></div>
+    <div class="modes" id="modes">
+      <button type="button" class="mode" id="pocketBtn">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M3 9c-1 2-1 4 0 6M21 9c1 2 1 4 0 6"/></svg></span>
+        <span class="mode-txt"><b>Pocket</b><span>Phone in your pocket. No camera, no waiting.</span></span>
+        <span class="mode-tag">Best for long sessions</span>
+      </button>
+      <button type="button" class="mode" id="liveBtn">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg></span>
+        <span class="mode-txt"><b>Live camera</b><span>Prop the phone up. It counts as you skip.</span></span>
+      </button>
+      <label class="mode" for="file">
+        <span class="mode-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg></span>
+        <span class="mode-txt"><b>Video</b><span>Count a video you already recorded.</span></span>
+        <input id="file" type="file" accept="video/*">
+      </label>
+    </div>
+    <p class="error" id="error" hidden></p>
+    <details class="tips" id="tips">
+      <summary>Tips</summary>
+      <ul>
+        <li><b>Pocket:</b> a snug trouser pocket, waistband or armband works best. Keep the screen on; the app keeps it awake.</li>
+        <li><b>Camera and video:</b> prop the phone up, fill at least half the picture's height, and be the only one moving.</li>
+        <li>Everything runs on this phone. Nothing is uploaded.</li>
+      </ul>
+    </details>
+
+    <div class="card session" id="sessionCard" hidden>
       <div class="progress-wrap" id="progressBox" hidden>
         <div class="progress-big" id="progressPct">0%</div>
         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="progressBar"><div></div></div>
@@ -310,24 +359,19 @@ details.card[open] > summary::after { content: "–"; }
       </div>
       <div id="liveBox" hidden>
         <div class="live"><video id="liveVideo" playsinline muted autoplay></video><div class="big" id="liveCount">0</div><div class="time"><span class="rec"></span><span id="liveTime">0:00</span></div></div>
-        <div class="actions" style="margin-top:12px"><button class="btn btn-accent" id="liveStop" type="button">Stop and save</button></div>
-        <p class="foot" style="margin-top:10px">Prop the phone up so it sees you from the shoulders up. The number updates every couple of seconds; the final count is worked out when you stop.</p>
+        <button class="btn btn-accent" id="liveStop" type="button" style="width:100%;margin-top:12px">Stop and save</button>
+        <p class="foot">Prop the phone up so it sees you from the shoulders up. The number updates every couple of seconds; the final count is worked out when you stop.</p>
       </div>
-      <p class="error" id="error" hidden></p>
-      <details class="tips" id="tips">
-        <summary>How to film it</summary>
-        <ul>
-          <li>Prop the phone up so it stays put.</li>
-          <li>Fill at least half the height of the picture. Head and shoulders must stay in frame.</li>
-          <li>Be the only person moving in the shot. Any place works; sound isn't used.</li>
-          <li>For long sessions, count live: there's nothing to process afterwards.</li>
-        </ul>
-      </details>
-      <p class="foot" id="heroFoot">Everything runs on this phone. Nothing is uploaded.</p>
+    </div>
+
+    <div class="card resume" id="resumeCard" hidden>
+      <p style="margin:0"><b>Unfinished pocket session</b><br><span class="hint" id="resumeText"></span></p>
+      <div class="row-actions"><button class="btn btn-accent btn-small" id="resumeSave" type="button">Save it</button><button class="btn btn-ghost btn-small" id="resumeDrop" type="button">Discard</button></div>
     </div>
 
     <section class="card" id="results" aria-label="Result">
       <span class="example" id="exampleTag">Example: a 39-second test clip, counted by hand at 51</span>
+      <p class="label" id="resultLabel" hidden>Last session</p>
       <div class="score"><span class="num" id="skips">51</span><span class="unit">skips</span></div>
       <div class="saved" id="savedRow" hidden>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
@@ -474,6 +518,15 @@ details.card[open] > summary::after { content: "–"; }
       </div>
     </div>
   </section>
+</div>
+
+<div class="pocket" id="pocket" hidden role="dialog" aria-modal="true" aria-label="Pocket counting">
+  <div class="pocket-top"><span class="rec"></span><span id="pocketTime">0:00</span><span class="pocket-state" id="pocketState">Counting</span></div>
+  <div class="pocket-count num" id="pocketCount">0</div>
+  <div class="pocket-label">skips</div>
+  <p class="pocket-hint" id="pocketHint">Put the phone in your pocket and start skipping. Keep the screen on.</p>
+  <label class="pocket-say"><input type="checkbox" id="sayHundreds"> Say every 100 out loud</label>
+  <button type="button" class="hold" id="pocketStop"><span class="ring" id="holdRing"></span><span>Hold to stop</span></button>
 </div>
 
 <nav class="tabbar" aria-label="Sections">
@@ -818,7 +871,39 @@ details.card[open] > summary::after { content: "–"; }
     }
   }
 
-  const api = { frameMotion, countSkips, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
+  // ------------------------------------------------------------- pocket mode
+  // Count from the phone's accelerometer (phone in a pocket / waistband / armband).
+  // Each skip is one cycle: near weightless in the air, a sharp spike on landing.
+  // t: seconds, a: |acceleration incl. gravity| in m/s², at whatever rate the
+  // sensor delivers. Resampled to an even 50 Hz, then counted like the video
+  // signal with thresholds in m/s²: walking (~1-2 m/s² RMS at the hip) stays
+  // below the floor, skipping (~4-10 m/s²) is well above it.
+  const ACCEL_HZ = 50;
+  function resample(t, a, hz) {
+    const n = t.length, t0 = t[0], m = Math.max(2, Math.floor((t[n - 1] - t0) * hz) + 1);
+    const tu = new Float64Array(m), au = new Float64Array(m);
+    for (let k = 0, j = 0; k < m; k++) {
+      const tk = t0 + k / hz; while (j < n - 2 && t[j + 1] <= tk) j++;
+      const span = t[j + 1] - t[j], f = span > 0 ? Math.min(1, Math.max(0, (tk - t[j]) / span)) : 0;
+      // a gap (screen was off) is held flat, so it reads as "not skipping"
+      au[k] = span > 0.5 ? a[j] : a[j] + (a[j + 1] - a[j]) * f; tu[k] = tk - t0;
+    }
+    return { t: tu, a: au, offset: t0 };
+  }
+  function countAccel(t, a, opts = {}) {
+    if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
+    const r0 = resample(t, a, ACCEL_HZ);
+    // countSkips expects image-style "height" (smaller = higher); landings are maxima of a.
+    // No set-edge trimming: the arm swing / rope-catch bumps it removes in video barely move a pocket.
+    const y = Array.from(r0.a, v => -v);
+    const r = countSkips(Array.from(r0.t), y, ACCEL_HZ, Object.assign({ minAmplitude: 2.0, maxHz: 4.5, relProminence: 0.35, edgeFraction: 0 }, opts));
+    r.skipTimes = r.skipTimes.map(x => x + r0.offset);
+    for (const st of r.sets) { st.start += r0.offset; st.end += r0.offset; }
+    r.fps = ACCEL_HZ; r.offset = r0.offset; r.bodySize = 1;
+    return r;
+  }
+
+  const api = { frameMotion, countSkips, countAccel, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SkipCore = api;
 })(typeof self !== "undefined" ? self : this);
 
@@ -919,6 +1004,7 @@ details.card[open] > summary::after { content: "–"; }
   const W = 160; // analysis width in pixels (tested: 160 gives the best count)
   const params = new URLSearchParams(root.location ? root.location.search : "");
   const SHRINK_MODE = params.get("grab") || "luma"; // "canvas" forces the old path (benchmarking)
+  let FAIL_AT = params.has("failat") ? parseFloat(params.get("failat")) : null; // testing only
 
   // ------------------------------------------------------------ worker pool
   async function scriptSource(id, file) {
@@ -1013,36 +1099,62 @@ self.onmessage = async (e) => {
       this.poke();
     }
     get processed() { return this.trackNext; }
+    // Everything needed to carry on later. Call when idle (after below(0)).
+    snapshot() {
+      const T = this.tracker;
+      return { n: this.trackNext, w: this.geom.w, h: this.geom.h, prevGray: this.prevGray ? this.prevGray.slice() : null,
+        ts: Float64Array.from(T.ts), vy: Float32Array.from(T.vy), vx: Float32Array.from(T.vx),
+        valid: Uint8Array.from(T.valid, v => v ? 1 : 0), spans: Float32Array.from(T.spans) };
+    }
+    restore(c) {
+      const T = this.tracker;
+      T.ts = Array.from(c.ts); T.vy = Array.from(c.vy); T.vx = Array.from(c.vx); T.valid = Array.from(c.valid, v => !!v); T.spans = Array.from(c.spans);
+      this.next = this.motionNext = this.trackNext = c.n; this.prevGray = c.prevGray ? new Uint8Array(c.prevGray) : null;
+    }
     async below(k) { while (this.inFlight > k) { if (this.failed) throw this.failed; await new Promise(r => this.wake = r); } if (this.failed) throw this.failed; }
     async finish() { await this.below(0); this.pump(); this.workers.forEach(w => w.terminate()); return this.tracker; }
     stop() { this.workers.forEach(w => w.terminate()); }
   }
 
+  // ------------------------------------------------------------ checkpoints (survive a reload)
+  // Saved in IndexedDB under the file's name + size + date, so picking the same
+  // video again continues where it stopped instead of starting over.
+  const idb = (() => {
+    let dbp = null;
+    const open = () => dbp ||= new Promise((res, rej) => { const r = indexedDB.open("skipcount", 1); r.onupgradeneeded = () => r.result.createObjectStore("checkpoints"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const tx = async (mode, f) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction("checkpoints", mode), q = f(t.objectStore("checkpoints")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+    return {
+      get: k => tx("readonly", st => st.get(k)).catch(() => null),
+      put: (k, v) => tx("readwrite", st => st.put(v, k)).catch(() => null),
+      del: k => tx("readwrite", st => st.delete(k)).catch(() => null),
+    };
+  })();
+  const fileKey = f => `v1|${f.name}|${f.size}|${f.lastModified}`;
+
+  // Resolves when the page is visible again (the screen is back on).
+  const whenVisible = () => document.visibilityState === "visible" ? Promise.resolve() : new Promise(r => {
+    const h = () => { if (document.visibilityState === "visible") { document.removeEventListener("visibilitychange", h); r(); } };
+    document.addEventListener("visibilitychange", h);
+  });
+
   // ------------------------------------------------------------ fast path: WebCodecs + mp4box
-  async function decodeWebCodecs(file, pool, onProgress) {
+  // mp4box only reads the file's index; frames are then read straight from the
+  // file by offset, so decoding can restart at any keyframe (after the screen
+  // turned off and the browser took the hardware decoder away, or after a reload).
+  async function decodeWebCodecs(file, pool, onProgress, opts = {}) {
     if (!("VideoDecoder" in root) || typeof MP4Box === "undefined") throw new Error("no webcodecs");
     const mp4 = MP4Box.createFile();
-    let track = null, info = null;
-    const ready = new Promise((res, rej) => {
-      mp4.onError = e => rej(new Error(String(e)));
-      mp4.onReady = i => { info = i; track = i.videoTracks[0]; track ? res() : rej(new Error("No video track in this file.")); };
-    });
-    const CHUNK = 4 << 20; let offset = 0, eof = false, followHint = true;
-    async function feed() {
-      if (eof) return;
-      const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-      buf.fileStart = offset;
+    let info = null, perr = null;
+    mp4.onReady = i => { info = i; }; mp4.onError = e => { perr = e; };
+    for (let off = 0; !info && !perr && off < file.size;) {
+      const buf = await file.slice(off, off + (4 << 20)).arrayBuffer(); buf.fileStart = off;
       const next = mp4.appendBuffer(buf);
-      // phase 1 follows mp4box's hint to jump over the video data to the index
-      // (phones often store it at the end); phase 2 reads the file in order
-      offset = (followHint && typeof next === "number" && next > offset) ? next : offset + buf.byteLength;
-      if (offset >= file.size) { eof = true; mp4.flush(); }
+      off = (typeof next === "number" && next > off) ? next : off + buf.byteLength; // jump over media data to the index
     }
-    let readyDone = false; ready.then(() => readyDone = true, () => readyDone = true);
-    while (!readyDone && !eof) await feed();
-    await ready;
-
-    const entry = mp4.getTrackById(track.id).mdia.minf.stbl.stsd.entries[0];
+    if (!info) throw new Error(perr ? String(perr) : "Couldn't read this video file.");
+    const track = info.videoTracks[0]; if (!track) throw new Error("No video track in this file.");
+    const trak = mp4.getTrackById(track.id), samples = trak.samples, total = samples.length;
+    const entry = trak.mdia.minf.stbl.stsd.entries[0];
     let description;
     const box = entry.avcC || entry.hvcC;
     if (box) { const ds = new DataStream(undefined, 0, DataStream.BIG_ENDIAN); box.write(ds); description = new Uint8Array(ds.buffer, 8); }
@@ -1052,45 +1164,85 @@ self.onmessage = async (e) => {
     const m = track.matrix || [65536, 0, 0, 0, 65536, 0, 0, 0, 0x40000000];
     pool.setGeometry(track.video.width, track.video.height, Math.round(Math.atan2(m[1], m[0]) * 180 / Math.PI));
     const duration = track.movie_duration / track.movie_timescale || track.duration / track.timescale;
-    const fps = track.nb_samples / duration, decimate = Math.max(1, Math.round(fps / 30));
-    const total = track.nb_samples;
+    const fps = total / duration, decimate = Math.max(1, Math.round(fps / 30)), fpsOut = fps / decimate;
+    const timeOf = sm => sm.cts / sm.timescale;
 
-    let decoded = 0, failed = null, lastT = -Infinity, reordered = 0;
-    const decoder = new VideoDecoder({
-      output: frame => {
-        const k = decoded++;
-        if (k % decimate) { frame.close(); return; }
-        const t = frame.timestamp / 1e6;
-        if (t < lastT) reordered++; lastT = Math.max(lastT, t);
-        pool.pushFrame(frame, t);
-      },
-      error: e => { failed = e; }
-    });
-    decoder.configure(config);
-    const pending = []; let nextNumber = 0; // mp4box may hand some samples over twice; keep each once
-    mp4.onSamples = (id, user, samples) => { for (const s of samples) { if (s.number < nextNumber) continue; nextNumber = s.number + 1; pending.push(s); } };
-    mp4.setExtractionOptions(track.id, null, { nbSamples: 60 });
-    mp4.start();
-    followHint = false; eof = false; offset = mp4.seek(0, true).offset;
-
-    const started = performance.now();
-    while (true) {
-      if (failed) throw failed;
-      while (pending.length && decoder.decodeQueueSize < 16) {
-        const s = pending.shift();
-        decoder.decode(new EncodedVideoChunk({ type: s.is_sync ? "key" : "delta", timestamp: 1e6 * s.cts / s.timescale, duration: 1e6 * s.duration / s.timescale, data: s.data }));
-        mp4.releaseUsedSamples(track.id, s.number + 1); // the chunk copied the bytes; free them
-      }
-      await pool.below(pool.size * 3); // keep workers busy, but don't let decoding run away
-      const done = Math.min(1, decoded / total), el = (performance.now() - started) / 1000;
-      onProgress(done, done > 0.03 ? el / done - el : null);
-      if (pending.length < 40 && !eof) { await feed(); continue; }
-      if (!pending.length && eof) break;
-      await new Promise(r => setTimeout(r, 0));
+    // carry on from a saved checkpoint?
+    let lastT = -Infinity; // newest frame time handed to the pool
+    const key = fileKey(file);
+    if (opts.resume !== false) {
+      const c = await idb.get(key);
+      if (c && c.w === pool.geom.w && c.h === pool.geom.h && c.n > 0) { pool.restore(c); lastT = c.ts[c.ts.length - 1]; opts.onResume?.(lastT / duration); }
     }
-    await decoder.flush(); decoder.close();
-    if (decoded < 10) throw new Error("decoded too few frames");
-    return { fps: fps / decimate, duration, reordered, created: info.created && info.created.getTime() > 86400000 * 365 * 5 ? info.created : null };
+    // first sample (decode order) we still need, backed up to its keyframe
+    const startIndex = t => {
+      let i = samples.findIndex(sm => timeOf(sm) > t + 1e-6); if (i < 0) return total;
+      // frames up to a few later samples can display earlier (B-frames): back up to the keyframe before
+      while (i > 0 && !samples[i].is_sync) i--;
+      return i;
+    };
+
+    let decoded = 0, failed = null, decoder = null, next = startIndex(lastT), restarts = 0;
+    const done = () => Math.min(1, Math.max(0, lastT) / duration);
+    const makeDecoder = () => {
+      failed = null;
+      const d = new VideoDecoder({
+        output: frame => {
+          decoded++;
+          const t = frame.timestamp / 1e6;
+          // already processed (we restarted at an earlier keyframe), or thinned out (>30 fps)
+          if (t <= lastT + 1e-6 || (decimate > 1 && Math.round(t * fps) % decimate)) { frame.close(); return; }
+          lastT = t; pool.pushFrame(frame, t);
+        },
+        error: e => { failed = e || new Error("decoder error"); }
+      });
+      d.configure(config);
+      return d;
+    };
+    decoder = makeDecoder();
+
+    const started = performance.now(), startDone = done();
+    let lastSave = performance.now();
+    const checkpoint = async () => { await pool.below(0); await idb.put(key, pool.snapshot()); lastSave = performance.now(); };
+    const onHide = () => { if (document.visibilityState === "hidden") checkpoint().catch(() => {}); };
+    document.addEventListener("visibilitychange", onHide);
+    try {
+      while (next < total) {
+        if (failed || decoder.state === "closed") {
+          // The browser took the decoder away (screen off / app in background) or it hiccupped:
+          // wait until we're visible, then restart from the keyframe before the next frame we need.
+          if (++restarts > 50) throw failed || new Error("decoder keeps failing");
+          await whenVisible();
+          try { decoder.close(); } catch {}
+          await pool.below(0);
+          decoder = makeDecoder(); next = startIndex(lastT);
+          continue;
+        }
+        // read a run of consecutive samples in one go (up to ~6 MB)
+        let j = next; const first = samples[next].offset;
+        while (j < total && j - next < 120 && samples[j].offset + samples[j].size - first <= (6 << 20) && (j === next || samples[j].offset >= samples[j - 1].offset)) j++;
+        const lastS = samples[j - 1], buf = new Uint8Array(await file.slice(first, lastS.offset + lastS.size).arrayBuffer());
+        for (let i = next; i < j && !failed; i++) {
+          const sm = samples[i];
+          while (decoder.decodeQueueSize > 16 && !failed) await new Promise(r => setTimeout(r, 0));
+          if (failed) break;
+          decoder.decode(new EncodedVideoChunk({ type: sm.is_sync ? "key" : "delta", timestamp: 1e6 * sm.cts / sm.timescale, duration: 1e6 * sm.duration / sm.timescale, data: buf.subarray(sm.offset - first, sm.offset - first + sm.size) }));
+          next = i + 1;
+        }
+        await pool.below(pool.size * 3); // keep workers busy, but don't let decoding run away
+        if (FAIL_AT != null && done() >= FAIL_AT) { FAIL_AT = null; try { decoder.close(); } catch {} } // test hook: simulate the browser reclaiming the decoder
+        const f = done(), el = (performance.now() - started) / 1000, rate = (f - startDone) / Math.max(el, 1e-3);
+        onProgress(f, f - startDone > 0.02 ? (1 - f) / rate : null);
+        if (performance.now() - lastSave > 5000) await checkpoint(); // often: a locked phone can freeze the page without warning
+      }
+      await decoder.flush().catch(e => { failed = e; });
+      if (failed && lastT < duration - 1) throw failed;
+    } finally {
+      document.removeEventListener("visibilitychange", onHide);
+      try { decoder.close(); } catch {}
+    }
+    if (decoded < 10 && lastT < 1) throw new Error("decoded too few frames");
+    return { fps: fpsOut, duration, restarts, key, created: info.created && info.created.getTime() > 86400000 * 365 * 5 ? info.created : null };
   }
 
   // ------------------------------------------------------------ fallback: play the video
@@ -1126,10 +1278,10 @@ self.onmessage = async (e) => {
     return r;
   }
 
-  async function analyse(file, { onProgress = () => {} } = {}) {
+  async function analyse(file, { onProgress = () => {}, onResume } = {}) {
     const t0 = performance.now();
     let via = "webcodecs", meta, pool = await Pool.create();
-    try { meta = await decodeWebCodecs(file, pool, onProgress); }
+    try { meta = await decodeWebCodecs(file, pool, onProgress, { onResume }); }
     catch (e) {
       console.warn("Fast path unavailable, using playback:", e);
       pool.stop(); pool = await Pool.create(); via = "playback";
@@ -1138,10 +1290,20 @@ self.onmessage = async (e) => {
     const tracker = await pool.finish();
     if (!tracker || tracker.ts.length < 10) throw new Error("No frames could be read from this video.");
     const result = countFrom(tracker);
-    return { result, via, frames: tracker.ts.length, seconds: (performance.now() - t0) / 1000, recordedAt: meta.created || new Date(file.lastModified || Date.now()), reordered: meta.reordered || 0 };
+    if (meta.key) idb.del(meta.key);
+    return { result, via, restarts: meta.restarts || 0, frames: tracker.ts.length, seconds: (performance.now() - t0) / 1000, recordedAt: meta.created || new Date(file.lastModified || Date.now()), reordered: meta.reordered || 0 };
   }
 
-  root.SkipEngine = { analyse, Pool, countFrom, W };
+    // Screen wake lock that comes back after the screen was off or the app was switched.
+  function keepAwake() {
+    let lock = null, on = true;
+    const get = async () => { if (!on || document.visibilityState !== "visible") return; try { lock = await navigator.wakeLock?.request("screen"); } catch {} };
+    const vis = () => { if (document.visibilityState === "visible") get(); };
+    document.addEventListener("visibilitychange", vis); get();
+    return { release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
+  }
+
+  root.SkipEngine = { analyse, Pool, countFrom, keepAwake, idb, whenVisible, W };
 })(typeof self !== "undefined" ? self : this);
 
 </script>
@@ -1423,7 +1585,7 @@ function loadProfile() {
   if (p.sex) $(p.sex === "female" ? "sexF" : "sexM").checked = true;
   showHeightUnit(p.heightUnit || "cm");
 }
-function saveProfile() { const p = {}; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+function saveProfile() { const p = { goal: store.get("skipcount.profile", {})?.goal }; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
 function profile() {
   let kg = parseFloat($("weight").value) || 70;
   if ($("weightUnit").value === "lb") kg *= 0.45359237;
@@ -1479,16 +1641,18 @@ function animateNumber(el, to, fmt = fmtInt) {
   const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
-function renderResult(r, { example = false, animate = false, sessionId = null, at = null, via = null } = {}) {
+function renderResult(r, opts = {}) {
+  const { example = false, animate = false, sessionId = null, at = null, via = null } = opts;
   last = r; currentId = sessionId;
-  $("exampleTag").hidden = !example;
+  $("exampleTag").hidden = !example; $("resultLabel").hidden = !opts.lastLabel;
+  $("chart").hidden = !r.filtered; document.querySelector("#results .legend").hidden = !r.filtered;
   animate ? animateNumber($("skips"), r.skips) : ($("skips").textContent = fmtInt(r.skips));
   $("sJump").textContent = fmtTime(r.jumpingSeconds);
   $("sRest").textContent = fmtTime(r.restSeconds);
   $("sPace").textContent = r.jumpingSeconds ? Math.round(60 * r.skips / r.jumpingSeconds) : "–";
   $("sSets").textContent = r.sets.length;
   $("sBest").textContent = r.sets.length ? Math.max(...r.sets.map(s => s.skips)) : 0;
-  $("sLen").textContent = fmtTime(r.totalSeconds);
+  $("sLen").textContent = fmtTime(r.totalSeconds); $("sLen").nextElementSibling.textContent = r.source === "pocket" ? "session" : "length";
   $("savedRow").hidden = !sessionId;
   if (sessionId && at) $("sessDate").value = dayKey(at);
   $("warnSmall").hidden = !(r.bodySize < 0.5);
@@ -1564,9 +1728,10 @@ function drawChart(range) {
 
 // ================================================================ hero states
 function heroState(state) { // idle | progress | live
-  $("heroIdle").hidden = state !== "idle"; $("heroActions").hidden = state !== "idle";
-  $("tips").hidden = state !== "idle"; $("heroFoot").hidden = state === "live";
+  $("sessionCard").hidden = state === "idle";
+  $("modes").hidden = state !== "idle"; $("tips").hidden = state !== "idle";
   $("progressBox").hidden = state !== "progress"; $("liveBox").hidden = state !== "live";
+  if (state !== "idle") $("sessionCard").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "center" });
 }
 function setProgress(frac, text) {
   $("progressPct").textContent = `${Math.round(frac * 100)}%`;
@@ -1575,7 +1740,7 @@ function setProgress(frac, text) {
   if (text) $("progressText").textContent = text;
 }
 function showError(msg) { $("error").textContent = msg; $("error").hidden = false; }
-async function wakeLock() { try { return await navigator.wakeLock?.request("screen"); } catch { return null; } }
+const wakeLock = () => SkipEngine.keepAwake(); // re-acquired whenever the screen comes back on
 
 function saveResult(r, at, source, via) {
   const s = addSession(sessionFromResult(r, at, source)); haptic(20);
@@ -1587,12 +1752,14 @@ function saveResult(r, at, source, via) {
 let videoUrl = null;
 async function analyseFile(file) {
   $("error").hidden = true; heroState("progress"); setProgress(0, "Opening video…");
-  const lock = await wakeLock();
+  const lock = wakeLock();
+  let resumedAt = null;
   try {
     const out = await SkipEngine.analyse(file, {
-      onProgress: (f, eta) => setProgress(f, f < 0.02 ? "Reading video…" : `Counting… ${eta != null ? `about ${fmtTime(Math.max(0, eta))} left` : ""}`)
+      onResume: f => { resumedAt = f; toast(`Picking up where it stopped (${Math.round(f * 100)}%)`); },
+      onProgress: (f, eta) => setProgress(f, (resumedAt != null ? "Resumed · " : "") + (f < 0.02 ? "Reading video…" : `Counting… ${eta != null ? `about ${fmtTime(Math.max(0, eta))} left` : ""}`))
     });
-    window.__skipDebug = { via: out.via, frames: out.frames, seconds: out.seconds, skipTimes: out.result.skipTimes, bodySize: out.result.bodySize };
+    window.__skipDebug = { via: out.via, frames: out.frames, seconds: out.seconds, restarts: out.restarts, resumedAt, skipTimes: out.result.skipTimes, bodySize: out.result.bodySize };
     heroState("idle");
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     videoUrl = URL.createObjectURL(file); $("player").src = videoUrl; $("playerCard").hidden = false;
@@ -1605,7 +1772,7 @@ async function analyseFile(file) {
   } catch (e) {
     console.error(e); heroState("idle");
     showError(`Couldn't analyse this video: ${e.message || e}. Try a video recorded with your phone's normal camera app.`);
-  } finally { $("file").value = ""; try { await lock?.release(); } catch {} }
+  } finally { $("file").value = ""; lock.release(); }
 }
 
 // ================================================================ live counting
@@ -1621,7 +1788,10 @@ async function startLive() {
   try { await v.play(); } catch {}
   const pool = await SkipEngine.Pool.create();
   const track = stream.getVideoTracks()[0];
-  live = { stream, pool, stop: false, started: performance.now(), lock: await wakeLock(), dropped: 0 };
+  live = { stream, pool, stop: false, started: performance.now(), lock: wakeLock(), dropped: 0 };
+  // the camera stops when the screen goes off: finish and save what was counted rather than lose it
+  live.onHide = () => { if (document.visibilityState === "hidden" && live && !live.stop) stopLive(); };
+  document.addEventListener("visibilitychange", live.onHide);
   $("liveCount").textContent = "0"; $("liveTime").textContent = "0:00";
   const st = track.getSettings();
   const srcW = st.width || v.videoWidth || 1280, srcH = st.height || v.videoHeight || 720;
@@ -1655,7 +1825,7 @@ async function startLive() {
 }
 async function stopLive() {
   if (!live) return;
-  const L = live; L.stop = true; clearInterval(L.timer);
+  const L = live; L.stop = true; clearInterval(L.timer); document.removeEventListener("visibilitychange", L.onHide);
   try { await L.reader?.cancel(); } catch {}
   L.stream.getTracks().forEach(t => t.stop()); $("liveVideo").srcObject = null;
   heroState("progress"); setProgress(1, "Working out the final count…");
@@ -1669,10 +1839,89 @@ async function stopLive() {
     else { renderResult(r); toast("No skips found"); }
     $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
   } catch (e) { heroState("idle"); showError(e.message || String(e)); }
-  finally { try { await L.lock?.release(); } catch {} live = null; }
+  finally { L.lock.release(); live = null; }
 }
 
-// ================================================================ greeting, streak, week dots
+// ================================================================ pocket mode (motion sensor)
+// Phone in a pocket / waistband / armband: count landings from the accelerometer.
+// Nothing is recorded; the count is live and final as soon as you stop.
+let pk = null;
+const PK_KEY = "pocket-current";
+async function startPocket() {
+  $("error").hidden = true;
+  if (!("DeviceMotionEvent" in window)) { showError("This browser doesn't give websites motion-sensor data. Try Safari on iPhone or Chrome on Android."); return; }
+  try { // iPhone asks once; must be called from the tap
+    if (typeof DeviceMotionEvent.requestPermission === "function" && await DeviceMotionEvent.requestPermission() !== "granted") {
+      showError("Motion access was not allowed. On iPhone: Settings › Apps › Safari › Motion & Orientation Access, then try again."); return;
+    }
+  } catch (e) { showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
+  if ($("sayHundreds").checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // unlock speech on iPhone
+  pk = { t: [], a: [], started: Date.now(), t0: performance.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false };
+  pk.onMotion = e => {
+    const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+    pk.gotData = true; pk.t.push(e.timeStamp / 1000); pk.a.push(Math.hypot(g.x, g.y, g.z));
+  };
+  addEventListener("devicemotion", pk.onMotion);
+  $("pocket").hidden = false; $("pocketCount").textContent = "0"; $("pocketTime").textContent = "0:00";
+  $("pocketState").textContent = "Counting"; $("pocketHint").textContent = "Put the phone in your pocket and start skipping. Keep the screen on.";
+  haptic(20);
+  pk.timer = setInterval(pocketTick, 1000);
+  pk.saver = setInterval(() => SkipEngine.idb.put(PK_KEY, { started: pk.started, t: Float64Array.from(pk.t), a: Float32Array.from(pk.a) }), 10000);
+  setTimeout(() => { if (pk && !pk.gotData) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Stop, and use the camera or a video instead."; } }, 2500);
+}
+function pocketTick() {
+  if (!pk) return;
+  $("pocketTime").textContent = fmtTime((performance.now() - pk.t0) / 1000);
+  if (document.visibilityState !== "visible") { $("pocketState").textContent = "Paused (screen off)"; return; }
+  $("pocketState").textContent = "Counting";
+  if (pk.t.length < 200) return;
+  try {
+    const r = SkipCore.countAccel(pk.t, pk.a); pk.count = r.skips;
+    $("pocketCount").textContent = fmtInt(r.skips);
+    if ($("sayHundreds").checked && "speechSynthesis" in window && Math.floor(r.skips / 100) > pk.lastSaid) {
+      pk.lastSaid = Math.floor(r.skips / 100); speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(String(pk.lastSaid * 100)));
+    }
+  } catch {}
+}
+async function stopPocket() {
+  if (!pk) return;
+  const P = pk; pk = null;
+  removeEventListener("devicemotion", P.onMotion); clearInterval(P.timer); clearInterval(P.saver); P.lock.release();
+  $("pocket").hidden = true; haptic(30);
+  await finishPocket(P.t, P.a, P.started);
+}
+async function finishPocket(t, a, started) {
+  SkipEngine.idb.del(PK_KEY);
+  if (t.length < 200) { toast("That was too short to count"); return; }
+  try {
+    const r = SkipCore.countAccel(Array.from(t), Array.from(a)); r.source = "pocket";
+    $("playerCard").hidden = true; $("speedNote").hidden = true;
+    if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
+    else { renderResult(r); toast("No skips found. Was the phone in a pocket while you skipped?"); }
+    window.__skipDebug = { via: "pocket", samples: t.length, skipTimes: r.skipTimes };
+    $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  } catch (e) { showError(e.message || String(e)); }
+}
+// press and hold to stop, so a pocket can't stop it by accident
+(function holdToStop() {
+  const b = $("pocketStop"), ring = $("holdRing"); let raf = 0, t0 = 0;
+  const reset = () => { cancelAnimationFrame(raf); ring.style.setProperty("--p", 0); };
+  const step = () => { const p = Math.min(100, (performance.now() - t0) / 9); ring.style.setProperty("--p", p); if (p >= 100) { reset(); stopPocket(); } else raf = requestAnimationFrame(step); };
+  b.addEventListener("pointerdown", e => { e.preventDefault(); t0 = performance.now(); haptic(); raf = requestAnimationFrame(step); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, reset);
+  b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stopPocket(); } }); // keyboard: no hold needed
+})();
+// an unfinished pocket session (the page was closed or reloaded mid-session)
+async function checkUnfinished() {
+  const c = await SkipEngine.idb.get(PK_KEY); if (!c || !c.t || c.t.length < 200) return;
+  let est = 0; try { est = SkipCore.countAccel(Array.from(c.t), Array.from(c.a)).skips; } catch {}
+  $("resumeText").textContent = `Started ${fmtDate(c.started, { weekday: "short", day: "numeric", month: "short" })} at ${new Date(c.started).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · about ${fmtInt(est)} skips`;
+  $("resumeCard").hidden = false;
+  $("resumeSave").onclick = async () => { $("resumeCard").hidden = true; await finishPocket(c.t, c.a, c.started); };
+  $("resumeDrop").onclick = () => { $("resumeCard").hidden = true; SkipEngine.idb.del(PK_KEY); toast("Discarded"); };
+}
+
+// ================================================================ streak & days
 function byDay() {
   const m = new Map();
   for (const s of sessions) {
@@ -1689,22 +1938,30 @@ function streaks(days) {
   for (const k of keys) { const dt = new Date(k + "T00:00"); run = prev && (dt - prev) / 864e5 === 1 ? run + 1 : 1; best = Math.max(best, run); prev = dt; }
   return { cur, best };
 }
+function goal() { return Math.max(10, +(store.get("skipcount.profile", {})?.goal) || 1000); }
 function renderHome() {
-  const now = new Date(), h = now.getHours();
-  $("today").textContent = fmtDate(now, { weekday: "long", day: "numeric", month: "long" });
-  $("greet").textContent = h < 5 ? "Late session?" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  const days = byDay(), { cur } = streaks(days);
-  $("streakNum").innerHTML = `${cur}<small>day streak</small>`;
-  $("flame").classList.toggle("on", cur > 0);
-  const mon = mondayOf(now), box = $("weekDots"); box.textContent = "";
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(mon, i), k = dayKey(d), el = document.createElement("div"), dot = document.createElement("i");
-    if (days.has(k)) dot.classList.add("done");
-    if (k === dayKey(now)) dot.classList.add("today");
-    dot.title = days.has(k) ? `${fmtInt(days.get(k).skips)} skips` : fmtDate(d, { weekday: "long" });
-    el.append(dot, DOW[i]); box.appendChild(el);
-  }
+  const now = new Date(), days = byDay(), t = days.get(dayKey(now)) || { skips: 0, kcal: 0, sec: 0, n: 0 }, { cur } = streaks(days);
+  $("todayDate").textContent = fmtDate(now, { weekday: "long", day: "numeric", month: "long" });
+  $("todaySkips").textContent = fmtInt(t.skips);
+  $("todayKcal").textContent = fmtKcal(t.kcal); $("todayMin").textContent = Math.round(t.sec / 60); $("todaySess").textContent = t.n;
+  $("streakNum").textContent = cur;
+  const g = goal(), pct = Math.min(100, t.skips / g * 100);
+  $("goalNum").textContent = fmtInt(g); $("goalFill").style.width = `${pct}%`; $("goalTrack").setAttribute("aria-valuenow", Math.round(pct));
+  const mon = mondayOf(now), vals = [...Array(7)].map((_, i) => days.get(dayKey(addDays(mon, i)))?.skips || 0), max = Math.max(g, ...vals);
+  const wb = $("weekBars"); wb.classList.remove("in"); wb.innerHTML = vals.map((v, i) => {
+    const isNow = dayKey(addDays(mon, i)) === dayKey(now);
+    return `<div class="${isNow ? "now" : ""}" title="${fmtInt(v)} skips"><i class="${v ? "" : "nil"}" style="height:${v ? Math.max(8, v / max * 48) : 3}px;transition-delay:${i * 40}ms"></i><em>${DOW[i]}</em></div>`;
+  }).join("");
+  requestAnimationFrame(() => requestAnimationFrame(() => wb.classList.add("in")));
 }
+$("goalBtn").onclick = () => { const i = $("goalInput"); i.value = goal(); i.hidden = false; $("goalBtn").hidden = true; i.focus(); i.select(); };
+const setGoal = () => {
+  const i = $("goalInput"), v = Math.round(+i.value);
+  if (v >= 10) { const p = store.get("skipcount.profile", {}) || {}; p.goal = v; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+  i.hidden = true; $("goalBtn").hidden = false; renderHome();
+};
+$("goalInput").addEventListener("change", setGoal); $("goalInput").addEventListener("blur", setGoal);
+$("goalInput").addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); });
 
 // ================================================================ insights
 const ins = { p: "week", anchor: mondayOf(new Date()), metric: "skips" };
@@ -1899,6 +2156,8 @@ for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change",
 });
 $("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyseFile(f); });
 $("liveBtn").addEventListener("click", startLive);
+$("pocketBtn").addEventListener("click", startPocket);
+$("sayHundreds").addEventListener("change", e => { if (e.target.checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }); // iPhone only allows speech that starts from a tap
 $("liveStop").addEventListener("click", stopLive);
 $("sessDate").addEventListener("change", e => {
   if (!currentId || !e.target.value) return;
@@ -1934,8 +2193,16 @@ $("importFile").addEventListener("change", async e => {
 });
 
 // ================================================================ start
-// Example: the verified 39 s test clip (51 skips by hand count), so the Count tab opens with real numbers.
+// Opening view: your last session if there is one, otherwise the verified example clip.
+function showLastSession() {
+  const s = sessions[sessions.length - 1]; if (!s) return false;
+  const sets = (s.sets || []).map((n, i) => ({ start: i, end: i, skips: n }));
+  renderResult({ skips: s.skips, skipTimes: [], sets, jumpingSeconds: s.jumpS, restSeconds: s.restS, totalSeconds: s.jumpS + s.restS, source: s.source, bodySize: 1 },
+    { sessionId: s.id, at: s.at, lastLabel: true });
+  return true;
+}
 (function example() {
+  if (showLastSession()) return;
   const sets = [[0.85, 8.18, 19], [16.1, 19.55, 9], [21.7, 25.6, 10], [28.1, 30.0, 5], [31.5, 34.6, 8]];
   const gt = [1.03,1.5,1.9,2.26,2.63,3.0,3.4,3.8,4.16,4.6,5.0,5.33,5.66,6.06,6.43,6.83,7.16,7.56,7.93,16.29,16.69,17.09,17.45,17.85,18.22,18.58,18.95,19.35,21.88,22.35,22.75,23.11,23.48,23.88,24.28,24.65,25.05,25.41,28.24,28.68,29.07,29.44,29.84,31.64,32.04,32.41,32.81,33.2,33.6,34.0,34.4];
   const fps = 30, n = 39 * fps, x = new Float64Array(n);
@@ -1948,6 +2215,7 @@ $("importFile").addEventListener("change", async e => {
     totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps, offset: 0, bodySize: 0.7 }, { example: true });
 })();
 window.loadProfile = loadProfile; window.renderCalories = renderCalories;
+checkUnfinished();
 renderHome();
 showTab(location.hash === "#insights" ? "insights" : "count", false);
 document.fonts?.ready.then(() => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });

@@ -12,6 +12,23 @@ Those pauses are billed as rest, so they don't inflate your calorie number.
 
 ## On your phone (no install)
 
+Three ways to count, all on the phone, nothing uploaded:
+
+- **Pocket:** phone in a trouser pocket, waistband or armband. The accelerometer feels every
+  landing, so there is no recording and nothing to process: the count is live and final the
+  moment you stop. Exact on simulated sessions, including 55 minutes / 5,000 skips and a
+  beginner session with stumbles and walking (walking alone counts 0); not yet checked on a
+  real body. The screen must stay on (Safari stops sensors when it locks), so the app keeps it
+  awake and shows a black screen with hold-to-stop. Unfinished sessions are kept and offered
+  for saving if the page is closed.
+- **Live camera:** prop the phone up; it counts as you skip.
+- **Video:** pick a recording. Decoding uses the hardware decoder and all CPU cores (about 3.5×
+  faster than the first version). If the screen turns off, it carries on when you're back
+  instead of starting over, and picking the same video after a reload resumes from a
+  checkpoint saved every 5 s.
+
+### Details
+
 `web/` is a single web page that does the whole analysis **inside your phone's browser**: pick a
 video from your gallery and get skips, sets, pace and calories. Nothing is uploaded, so there's
 no file-size limit. It uses the same counting algorithm as the Python version (see below), and

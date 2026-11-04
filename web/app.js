@@ -34,7 +34,7 @@ function loadProfile() {
   if (p.sex) $(p.sex === "female" ? "sexF" : "sexM").checked = true;
   showHeightUnit(p.heightUnit || "cm");
 }
-function saveProfile() { const p = {}; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+function saveProfile() { const p = { goal: store.get("skipcount.profile", {})?.goal }; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
 function profile() {
   let kg = parseFloat($("weight").value) || 70;
   if ($("weightUnit").value === "lb") kg *= 0.45359237;
@@ -90,16 +90,18 @@ function animateNumber(el, to, fmt = fmtInt) {
   const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
 }
-function renderResult(r, { example = false, animate = false, sessionId = null, at = null, via = null } = {}) {
+function renderResult(r, opts = {}) {
+  const { example = false, animate = false, sessionId = null, at = null, via = null } = opts;
   last = r; currentId = sessionId;
-  $("exampleTag").hidden = !example;
+  $("exampleTag").hidden = !example; $("resultLabel").hidden = !opts.lastLabel;
+  $("chart").hidden = !r.filtered; document.querySelector("#results .legend").hidden = !r.filtered;
   animate ? animateNumber($("skips"), r.skips) : ($("skips").textContent = fmtInt(r.skips));
   $("sJump").textContent = fmtTime(r.jumpingSeconds);
   $("sRest").textContent = fmtTime(r.restSeconds);
   $("sPace").textContent = r.jumpingSeconds ? Math.round(60 * r.skips / r.jumpingSeconds) : "–";
   $("sSets").textContent = r.sets.length;
   $("sBest").textContent = r.sets.length ? Math.max(...r.sets.map(s => s.skips)) : 0;
-  $("sLen").textContent = fmtTime(r.totalSeconds);
+  $("sLen").textContent = fmtTime(r.totalSeconds); $("sLen").nextElementSibling.textContent = r.source === "pocket" ? "session" : "length";
   $("savedRow").hidden = !sessionId;
   if (sessionId && at) $("sessDate").value = dayKey(at);
   $("warnSmall").hidden = !(r.bodySize < 0.5);
@@ -175,9 +177,10 @@ function drawChart(range) {
 
 // ================================================================ hero states
 function heroState(state) { // idle | progress | live
-  $("heroIdle").hidden = state !== "idle"; $("heroActions").hidden = state !== "idle";
-  $("tips").hidden = state !== "idle"; $("heroFoot").hidden = state === "live";
+  $("sessionCard").hidden = state === "idle";
+  $("modes").hidden = state !== "idle"; $("tips").hidden = state !== "idle";
   $("progressBox").hidden = state !== "progress"; $("liveBox").hidden = state !== "live";
+  if (state !== "idle") $("sessionCard").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "center" });
 }
 function setProgress(frac, text) {
   $("progressPct").textContent = `${Math.round(frac * 100)}%`;
@@ -186,7 +189,7 @@ function setProgress(frac, text) {
   if (text) $("progressText").textContent = text;
 }
 function showError(msg) { $("error").textContent = msg; $("error").hidden = false; }
-async function wakeLock() { try { return await navigator.wakeLock?.request("screen"); } catch { return null; } }
+const wakeLock = () => SkipEngine.keepAwake(); // re-acquired whenever the screen comes back on
 
 function saveResult(r, at, source, via) {
   const s = addSession(sessionFromResult(r, at, source)); haptic(20);
@@ -198,12 +201,14 @@ function saveResult(r, at, source, via) {
 let videoUrl = null;
 async function analyseFile(file) {
   $("error").hidden = true; heroState("progress"); setProgress(0, "Opening video…");
-  const lock = await wakeLock();
+  const lock = wakeLock();
+  let resumedAt = null;
   try {
     const out = await SkipEngine.analyse(file, {
-      onProgress: (f, eta) => setProgress(f, f < 0.02 ? "Reading video…" : `Counting… ${eta != null ? `about ${fmtTime(Math.max(0, eta))} left` : ""}`)
+      onResume: f => { resumedAt = f; toast(`Picking up where it stopped (${Math.round(f * 100)}%)`); },
+      onProgress: (f, eta) => setProgress(f, (resumedAt != null ? "Resumed · " : "") + (f < 0.02 ? "Reading video…" : `Counting… ${eta != null ? `about ${fmtTime(Math.max(0, eta))} left` : ""}`))
     });
-    window.__skipDebug = { via: out.via, frames: out.frames, seconds: out.seconds, skipTimes: out.result.skipTimes, bodySize: out.result.bodySize };
+    window.__skipDebug = { via: out.via, frames: out.frames, seconds: out.seconds, restarts: out.restarts, resumedAt, skipTimes: out.result.skipTimes, bodySize: out.result.bodySize };
     heroState("idle");
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     videoUrl = URL.createObjectURL(file); $("player").src = videoUrl; $("playerCard").hidden = false;
@@ -216,7 +221,7 @@ async function analyseFile(file) {
   } catch (e) {
     console.error(e); heroState("idle");
     showError(`Couldn't analyse this video: ${e.message || e}. Try a video recorded with your phone's normal camera app.`);
-  } finally { $("file").value = ""; try { await lock?.release(); } catch {} }
+  } finally { $("file").value = ""; lock.release(); }
 }
 
 // ================================================================ live counting
@@ -232,7 +237,10 @@ async function startLive() {
   try { await v.play(); } catch {}
   const pool = await SkipEngine.Pool.create();
   const track = stream.getVideoTracks()[0];
-  live = { stream, pool, stop: false, started: performance.now(), lock: await wakeLock(), dropped: 0 };
+  live = { stream, pool, stop: false, started: performance.now(), lock: wakeLock(), dropped: 0 };
+  // the camera stops when the screen goes off: finish and save what was counted rather than lose it
+  live.onHide = () => { if (document.visibilityState === "hidden" && live && !live.stop) stopLive(); };
+  document.addEventListener("visibilitychange", live.onHide);
   $("liveCount").textContent = "0"; $("liveTime").textContent = "0:00";
   const st = track.getSettings();
   const srcW = st.width || v.videoWidth || 1280, srcH = st.height || v.videoHeight || 720;
@@ -266,7 +274,7 @@ async function startLive() {
 }
 async function stopLive() {
   if (!live) return;
-  const L = live; L.stop = true; clearInterval(L.timer);
+  const L = live; L.stop = true; clearInterval(L.timer); document.removeEventListener("visibilitychange", L.onHide);
   try { await L.reader?.cancel(); } catch {}
   L.stream.getTracks().forEach(t => t.stop()); $("liveVideo").srcObject = null;
   heroState("progress"); setProgress(1, "Working out the final count…");
@@ -280,10 +288,89 @@ async function stopLive() {
     else { renderResult(r); toast("No skips found"); }
     $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
   } catch (e) { heroState("idle"); showError(e.message || String(e)); }
-  finally { try { await L.lock?.release(); } catch {} live = null; }
+  finally { L.lock.release(); live = null; }
 }
 
-// ================================================================ greeting, streak, week dots
+// ================================================================ pocket mode (motion sensor)
+// Phone in a pocket / waistband / armband: count landings from the accelerometer.
+// Nothing is recorded; the count is live and final as soon as you stop.
+let pk = null;
+const PK_KEY = "pocket-current";
+async function startPocket() {
+  $("error").hidden = true;
+  if (!("DeviceMotionEvent" in window)) { showError("This browser doesn't give websites motion-sensor data. Try Safari on iPhone or Chrome on Android."); return; }
+  try { // iPhone asks once; must be called from the tap
+    if (typeof DeviceMotionEvent.requestPermission === "function" && await DeviceMotionEvent.requestPermission() !== "granted") {
+      showError("Motion access was not allowed. On iPhone: Settings › Apps › Safari › Motion & Orientation Access, then try again."); return;
+    }
+  } catch (e) { showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
+  if ($("sayHundreds").checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // unlock speech on iPhone
+  pk = { t: [], a: [], started: Date.now(), t0: performance.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false };
+  pk.onMotion = e => {
+    const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+    pk.gotData = true; pk.t.push(e.timeStamp / 1000); pk.a.push(Math.hypot(g.x, g.y, g.z));
+  };
+  addEventListener("devicemotion", pk.onMotion);
+  $("pocket").hidden = false; $("pocketCount").textContent = "0"; $("pocketTime").textContent = "0:00";
+  $("pocketState").textContent = "Counting"; $("pocketHint").textContent = "Put the phone in your pocket and start skipping. Keep the screen on.";
+  haptic(20);
+  pk.timer = setInterval(pocketTick, 1000);
+  pk.saver = setInterval(() => SkipEngine.idb.put(PK_KEY, { started: pk.started, t: Float64Array.from(pk.t), a: Float32Array.from(pk.a) }), 10000);
+  setTimeout(() => { if (pk && !pk.gotData) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Stop, and use the camera or a video instead."; } }, 2500);
+}
+function pocketTick() {
+  if (!pk) return;
+  $("pocketTime").textContent = fmtTime((performance.now() - pk.t0) / 1000);
+  if (document.visibilityState !== "visible") { $("pocketState").textContent = "Paused (screen off)"; return; }
+  $("pocketState").textContent = "Counting";
+  if (pk.t.length < 200) return;
+  try {
+    const r = SkipCore.countAccel(pk.t, pk.a); pk.count = r.skips;
+    $("pocketCount").textContent = fmtInt(r.skips);
+    if ($("sayHundreds").checked && "speechSynthesis" in window && Math.floor(r.skips / 100) > pk.lastSaid) {
+      pk.lastSaid = Math.floor(r.skips / 100); speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(String(pk.lastSaid * 100)));
+    }
+  } catch {}
+}
+async function stopPocket() {
+  if (!pk) return;
+  const P = pk; pk = null;
+  removeEventListener("devicemotion", P.onMotion); clearInterval(P.timer); clearInterval(P.saver); P.lock.release();
+  $("pocket").hidden = true; haptic(30);
+  await finishPocket(P.t, P.a, P.started);
+}
+async function finishPocket(t, a, started) {
+  SkipEngine.idb.del(PK_KEY);
+  if (t.length < 200) { toast("That was too short to count"); return; }
+  try {
+    const r = SkipCore.countAccel(Array.from(t), Array.from(a)); r.source = "pocket";
+    $("playerCard").hidden = true; $("speedNote").hidden = true;
+    if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
+    else { renderResult(r); toast("No skips found. Was the phone in a pocket while you skipped?"); }
+    window.__skipDebug = { via: "pocket", samples: t.length, skipTimes: r.skipTimes };
+    $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  } catch (e) { showError(e.message || String(e)); }
+}
+// press and hold to stop, so a pocket can't stop it by accident
+(function holdToStop() {
+  const b = $("pocketStop"), ring = $("holdRing"); let raf = 0, t0 = 0;
+  const reset = () => { cancelAnimationFrame(raf); ring.style.setProperty("--p", 0); };
+  const step = () => { const p = Math.min(100, (performance.now() - t0) / 9); ring.style.setProperty("--p", p); if (p >= 100) { reset(); stopPocket(); } else raf = requestAnimationFrame(step); };
+  b.addEventListener("pointerdown", e => { e.preventDefault(); t0 = performance.now(); haptic(); raf = requestAnimationFrame(step); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, reset);
+  b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stopPocket(); } }); // keyboard: no hold needed
+})();
+// an unfinished pocket session (the page was closed or reloaded mid-session)
+async function checkUnfinished() {
+  const c = await SkipEngine.idb.get(PK_KEY); if (!c || !c.t || c.t.length < 200) return;
+  let est = 0; try { est = SkipCore.countAccel(Array.from(c.t), Array.from(c.a)).skips; } catch {}
+  $("resumeText").textContent = `Started ${fmtDate(c.started, { weekday: "short", day: "numeric", month: "short" })} at ${new Date(c.started).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · about ${fmtInt(est)} skips`;
+  $("resumeCard").hidden = false;
+  $("resumeSave").onclick = async () => { $("resumeCard").hidden = true; await finishPocket(c.t, c.a, c.started); };
+  $("resumeDrop").onclick = () => { $("resumeCard").hidden = true; SkipEngine.idb.del(PK_KEY); toast("Discarded"); };
+}
+
+// ================================================================ streak & days
 function byDay() {
   const m = new Map();
   for (const s of sessions) {
@@ -300,22 +387,30 @@ function streaks(days) {
   for (const k of keys) { const dt = new Date(k + "T00:00"); run = prev && (dt - prev) / 864e5 === 1 ? run + 1 : 1; best = Math.max(best, run); prev = dt; }
   return { cur, best };
 }
+function goal() { return Math.max(10, +(store.get("skipcount.profile", {})?.goal) || 1000); }
 function renderHome() {
-  const now = new Date(), h = now.getHours();
-  $("today").textContent = fmtDate(now, { weekday: "long", day: "numeric", month: "long" });
-  $("greet").textContent = h < 5 ? "Late session?" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  const days = byDay(), { cur } = streaks(days);
-  $("streakNum").innerHTML = `${cur}<small>day streak</small>`;
-  $("flame").classList.toggle("on", cur > 0);
-  const mon = mondayOf(now), box = $("weekDots"); box.textContent = "";
-  for (let i = 0; i < 7; i++) {
-    const d = addDays(mon, i), k = dayKey(d), el = document.createElement("div"), dot = document.createElement("i");
-    if (days.has(k)) dot.classList.add("done");
-    if (k === dayKey(now)) dot.classList.add("today");
-    dot.title = days.has(k) ? `${fmtInt(days.get(k).skips)} skips` : fmtDate(d, { weekday: "long" });
-    el.append(dot, DOW[i]); box.appendChild(el);
-  }
+  const now = new Date(), days = byDay(), t = days.get(dayKey(now)) || { skips: 0, kcal: 0, sec: 0, n: 0 }, { cur } = streaks(days);
+  $("todayDate").textContent = fmtDate(now, { weekday: "long", day: "numeric", month: "long" });
+  $("todaySkips").textContent = fmtInt(t.skips);
+  $("todayKcal").textContent = fmtKcal(t.kcal); $("todayMin").textContent = Math.round(t.sec / 60); $("todaySess").textContent = t.n;
+  $("streakNum").textContent = cur;
+  const g = goal(), pct = Math.min(100, t.skips / g * 100);
+  $("goalNum").textContent = fmtInt(g); $("goalFill").style.width = `${pct}%`; $("goalTrack").setAttribute("aria-valuenow", Math.round(pct));
+  const mon = mondayOf(now), vals = [...Array(7)].map((_, i) => days.get(dayKey(addDays(mon, i)))?.skips || 0), max = Math.max(g, ...vals);
+  const wb = $("weekBars"); wb.classList.remove("in"); wb.innerHTML = vals.map((v, i) => {
+    const isNow = dayKey(addDays(mon, i)) === dayKey(now);
+    return `<div class="${isNow ? "now" : ""}" title="${fmtInt(v)} skips"><i class="${v ? "" : "nil"}" style="height:${v ? Math.max(8, v / max * 48) : 3}px;transition-delay:${i * 40}ms"></i><em>${DOW[i]}</em></div>`;
+  }).join("");
+  requestAnimationFrame(() => requestAnimationFrame(() => wb.classList.add("in")));
 }
+$("goalBtn").onclick = () => { const i = $("goalInput"); i.value = goal(); i.hidden = false; $("goalBtn").hidden = true; i.focus(); i.select(); };
+const setGoal = () => {
+  const i = $("goalInput"), v = Math.round(+i.value);
+  if (v >= 10) { const p = store.get("skipcount.profile", {}) || {}; p.goal = v; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+  i.hidden = true; $("goalBtn").hidden = false; renderHome();
+};
+$("goalInput").addEventListener("change", setGoal); $("goalInput").addEventListener("blur", setGoal);
+$("goalInput").addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); });
 
 // ================================================================ insights
 const ins = { p: "week", anchor: mondayOf(new Date()), metric: "skips" };
@@ -510,6 +605,8 @@ for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change",
 });
 $("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyseFile(f); });
 $("liveBtn").addEventListener("click", startLive);
+$("pocketBtn").addEventListener("click", startPocket);
+$("sayHundreds").addEventListener("change", e => { if (e.target.checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }); // iPhone only allows speech that starts from a tap
 $("liveStop").addEventListener("click", stopLive);
 $("sessDate").addEventListener("change", e => {
   if (!currentId || !e.target.value) return;
@@ -545,8 +642,16 @@ $("importFile").addEventListener("change", async e => {
 });
 
 // ================================================================ start
-// Example: the verified 39 s test clip (51 skips by hand count), so the Count tab opens with real numbers.
+// Opening view: your last session if there is one, otherwise the verified example clip.
+function showLastSession() {
+  const s = sessions[sessions.length - 1]; if (!s) return false;
+  const sets = (s.sets || []).map((n, i) => ({ start: i, end: i, skips: n }));
+  renderResult({ skips: s.skips, skipTimes: [], sets, jumpingSeconds: s.jumpS, restSeconds: s.restS, totalSeconds: s.jumpS + s.restS, source: s.source, bodySize: 1 },
+    { sessionId: s.id, at: s.at, lastLabel: true });
+  return true;
+}
 (function example() {
+  if (showLastSession()) return;
   const sets = [[0.85, 8.18, 19], [16.1, 19.55, 9], [21.7, 25.6, 10], [28.1, 30.0, 5], [31.5, 34.6, 8]];
   const gt = [1.03,1.5,1.9,2.26,2.63,3.0,3.4,3.8,4.16,4.6,5.0,5.33,5.66,6.06,6.43,6.83,7.16,7.56,7.93,16.29,16.69,17.09,17.45,17.85,18.22,18.58,18.95,19.35,21.88,22.35,22.75,23.11,23.48,23.88,24.28,24.65,25.05,25.41,28.24,28.68,29.07,29.44,29.84,31.64,32.04,32.41,32.81,33.2,33.6,34.0,34.4];
   const fps = 30, n = 39 * fps, x = new Float64Array(n);
@@ -559,6 +664,7 @@ $("importFile").addEventListener("change", async e => {
     totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps, offset: 0, bodySize: 0.7 }, { example: true });
 })();
 window.loadProfile = loadProfile; window.renderCalories = renderCalories;
+checkUnfinished();
 renderHome();
 showTab(location.hash === "#insights" ? "insights" : "count", false);
 document.fonts?.ready.then(() => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });

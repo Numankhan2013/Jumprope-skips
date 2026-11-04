@@ -326,6 +326,38 @@
     }
   }
 
-  const api = { frameMotion, countSkips, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
+  // ------------------------------------------------------------- pocket mode
+  // Count from the phone's accelerometer (phone in a pocket / waistband / armband).
+  // Each skip is one cycle: near weightless in the air, a sharp spike on landing.
+  // t: seconds, a: |acceleration incl. gravity| in m/s², at whatever rate the
+  // sensor delivers. Resampled to an even 50 Hz, then counted like the video
+  // signal with thresholds in m/s²: walking (~1-2 m/s² RMS at the hip) stays
+  // below the floor, skipping (~4-10 m/s²) is well above it.
+  const ACCEL_HZ = 50;
+  function resample(t, a, hz) {
+    const n = t.length, t0 = t[0], m = Math.max(2, Math.floor((t[n - 1] - t0) * hz) + 1);
+    const tu = new Float64Array(m), au = new Float64Array(m);
+    for (let k = 0, j = 0; k < m; k++) {
+      const tk = t0 + k / hz; while (j < n - 2 && t[j + 1] <= tk) j++;
+      const span = t[j + 1] - t[j], f = span > 0 ? Math.min(1, Math.max(0, (tk - t[j]) / span)) : 0;
+      // a gap (screen was off) is held flat, so it reads as "not skipping"
+      au[k] = span > 0.5 ? a[j] : a[j] + (a[j + 1] - a[j]) * f; tu[k] = tk - t0;
+    }
+    return { t: tu, a: au, offset: t0 };
+  }
+  function countAccel(t, a, opts = {}) {
+    if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
+    const r0 = resample(t, a, ACCEL_HZ);
+    // countSkips expects image-style "height" (smaller = higher); landings are maxima of a.
+    // No set-edge trimming: the arm swing / rope-catch bumps it removes in video barely move a pocket.
+    const y = Array.from(r0.a, v => -v);
+    const r = countSkips(Array.from(r0.t), y, ACCEL_HZ, Object.assign({ minAmplitude: 2.0, maxHz: 4.5, relProminence: 0.35, edgeFraction: 0 }, opts));
+    r.skipTimes = r.skipTimes.map(x => x + r0.offset);
+    for (const st of r.sets) { st.start += r0.offset; st.end += r0.offset; }
+    r.fps = ACCEL_HZ; r.offset = r0.offset; r.bodySize = 1;
+    return r;
+  }
+
+  const api = { frameMotion, countSkips, countAccel, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SkipCore = api;
 })(typeof self !== "undefined" ? self : this);
