@@ -4,10 +4,10 @@ from pathlib import Path
 
 here = Path(__file__).parent
 html = (here / "index.html").read_text()
-core = (here / "core.js").read_text()
-journal = (here / "journal.js").read_text()
-out = html.replace('<script src="core.js"></script>', "<script>\n" + core + "\n</script>")
-out = out.replace('<script src="journal.js"></script>', "<script>\n" + journal + "\n</script>")
+out = html
+for name, sid in [("core.js", "skipcore"), ("shrink.js", "skipshrink"), ("engine.js", "skipengine"), ("journal.js", "skipjournal"), ("app.js", "skipapp")]:
+    src = (here / name).read_text()
+    out = out.replace(f'<script src="{name}"></script>', f'<script id="{sid}">\n{src}\n</script>')
 if "--fragment" not in sys.argv:
     # a complete standalone document (for GitHub Pages / Cloudflare Pages / any static host)
     head = (
@@ -20,7 +20,7 @@ if "--fragment" not in sys.argv:
         '<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>\n'
     )
     out = out.replace('<meta name="claude:viewport-fit-sides" content="cover">\n', "")
-    i = out.index("<main>")
+    i = out.index("<div class=\"wrap\">")
     out = head + out[:i] + "</head>\n<body>\n" + out[i:] + "\n</body>\n</html>\n"
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 dest = Path(args[0]) if args else here.parent / "docs" / "index.html"

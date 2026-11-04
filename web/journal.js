@@ -90,85 +90,43 @@
   const time = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
     return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
 
-  // ------------------------------------------------------------------ save offer
-  let pending = null; // what the Save card would save
-  function offer(p) {
-    pending = { ...p, saved: false };
-    el("saveDate").value = dayKey(p.when || Date.now());
-    el("saveDate").max = dayKey(Date.now());
-    el("saveNote").value = "";
-    el("saveSummary").textContent = `${int(p.skips)} skips` + (p.sets?.length ? ` in ${p.sets.length} set${p.sets.length === 1 ? "" : "s"}` : "") + `, ${time(p.jumpS)} jumping`;
-    el("saveBtn").disabled = false; el("saveBtn").textContent = "Save to history";
-    el("saveCard").hidden = false;
+  // ------------------------------------------------------------------ sessions API (used by app.js)
+  // A session: { id, date: "YYYY-MM-DD", at (ms, when it happened), source, skips, sets, best,
+  //              jumpS, restS, kcal, note, createdAt, updatedAt }
+  const listeners = new Set();
+  function render() { for (const f of listeners) { try { f(state.sessions); } catch (e) { console.error(e); } } }
+  function add(p) {
+    const now = Date.now(), at = p.at || now, sets = (p.sets || []).slice(0, 500);
+    const s = { id: uid(), date: dayKey(at), at, source: p.source || "video", skips: Math.round(p.skips), sets,
+      best: sets.length ? Math.max(...sets) : 0, jumpS: Math.round(p.jumpS || 0), restS: Math.round(p.restS || 0),
+      kcal: Math.round((p.kcal || 0) * 10) / 10, note: (p.note || "").slice(0, 140), createdAt: now, updatedAt: now };
+    state.sessions = sortSessions([s, ...state.sessions]); write(); render(); cloud.schedule();
+    return s;
   }
-  function savePending() {
-    if (!pending || pending.saved) return;
-    const date = el("saveDate").value || dayKey(Date.now());
-    const prof = root.profile ? root.profile() : { kg: 70, cm: 175, age: 30, sex: "male" };
-    const c = root.SkipCore.calories(pending.skips, pending.jumpS, pending.restS, prof.kg, prof.cm, prof.age, prof.sex);
-    const now = Date.now(), sets = (pending.sets || []).slice(0, 500);
-    const s = {
-      id: uid(), date, source: pending.source, skips: Math.round(pending.skips), sets,
-      best: sets.length ? Math.max(...sets) : 0, jumpS: Math.round(pending.jumpS), restS: Math.round(pending.restS || 0),
-      kcal: Math.round(c.total), note: el("saveNote").value.trim().slice(0, 140), createdAt: now, updatedAt: now,
-    };
-    state.sessions = sortSessions([s, ...state.sessions]); write();
-    pending.saved = true;
-    el("saveBtn").disabled = true; el("saveBtn").textContent = "Saved ✓";
-    render(); cloud.schedule();
+  function update(id, patch) {
+    const s = state.sessions.find(x => x.id === id); if (!s) return null;
+    Object.assign(s, patch, { updatedAt: Date.now() });
+    if (patch.at) s.date = dayKey(patch.at);
+    state.sessions = sortSessions(state.sessions); write(); render(); cloud.schedule();
+    return s;
   }
-  function removeSession(id) {
-    const s = state.sessions.find(x => x.id === id); if (!s) return;
-    if (!confirm(`Delete ${int(s.skips)} skips on ${nice(s.date)}?`)) return;
+  function remove(id) {
+    const s = state.sessions.find(x => x.id === id); if (!s) return null;
     state.sessions = state.sessions.filter(x => x.id !== id);
     state.deleted = [...state.deleted.filter(t => t.id !== id), { id, at: Date.now() }];
     write(); render(); cloud.schedule();
+    return s;
   }
-
-  // ------------------------------------------------------------------ history card
-  let showAll = false;
-  function render() {
-    const box = el("history"); if (!box) return;
-    const list = state.sessions, has = list.length > 0;
-    el("histEmpty").hidden = has; el("histBody").hidden = !has;
-    if (!has) return;
-    const ins = insights(list);
-    el("hToday").textContent = int(ins.today);
-    el("hWeek").textContent = int(ins.week);
-    el("hMonth").textContent = int(ins.month);
-    el("hAll").textContent = int(ins.all);
-    el("hStreak").textContent = ins.streak;
-    el("hStreakSub").textContent = `day streak · best ${ins.longest}`;
-    el("hBestSet").textContent = int(ins.bestSet);
-    el("hPace").textContent = ins.paceRecent ? Math.round(ins.paceRecent) : "–";
-
-    const lines = [];
-    if (ins.lastWeekToDate || ins.week) {
-      const diff = ins.week - ins.lastWeekToDate;
-      lines.push(ins.lastWeekToDate ? `This week: ${int(ins.week)} skips, ${diff >= 0 ? "up" : "down"} ${int(Math.abs(diff))} on the same point last week.` : `This week: ${int(ins.week)} skips so far.`);
-    }
-    if (ins.jumpWeekS) lines.push(`${time(ins.jumpWeekS)} of actual jumping and about ${int(ins.kcalWeek)} kcal this week.`);
-    if (ins.paceRecent && ins.paceEarlier) {
-      const d = Math.round(ins.paceRecent - ins.paceEarlier);
-      lines.push(d === 0 ? `Pace is steady at ${Math.round(ins.paceRecent)} skips/min.` : `Pace over your last 5 sessions is ${Math.abs(d)} skips/min ${d > 0 ? "faster" : "slower"} than the 5 before.`);
-    }
-    if (ins.bestDay) lines.push(`Biggest day: ${int(ins.bestDay.skips)} skips on ${nice(ins.bestDay.date)}.`);
-    lines.push(`${ins.sessions} session${ins.sessions === 1 ? "" : "s"} over ${ins.activeDays} day${ins.activeDays === 1 ? "" : "s"}.`);
-    el("hLines").innerHTML = lines.map(l => `<li>${esc(l)}</li>`).join("");
-
-    const max = Math.max(1, ...ins.last14.map(d => d.skips));
-    el("hBars").innerHTML = ins.last14.map(d => {
-      const h = d.skips ? Math.max(4, Math.round(100 * d.skips / max)) : 0;
-      const lbl = parseDay(d.date).toLocaleDateString(undefined, { weekday: "narrow" });
-      return `<div class="bar" title="${esc(nice(d.date))}: ${int(d.skips)} skips"><i style="height:${h}%"></i><span>${esc(lbl)}</span></div>`;
-    }).join("");
-
-    const shown = showAll ? list : list.slice(0, 8);
-    el("hList").innerHTML = shown.map(s => `<li><div><b>${int(s.skips)}</b> skips <span class="hint">· ${esc(nice(s.date))}</span>` +
-      `<div class="note">${s.sets?.length ? `${s.sets.length} sets · best ${int(s.best)} · ` : ""}${time(s.jumpS)} jumping · ${s.jumpS ? Math.round(60 * s.skips / s.jumpS) : "–"}/min · ${int(s.kcal)} kcal${s.source === "manual" ? " · typed in" : ""}${s.note ? ` · ${esc(s.note)}` : ""}</div></div>` +
-      `<button type="button" class="del" data-del="${esc(s.id)}" aria-label="Delete this session">×</button></li>`).join("");
-    el("hMore").hidden = list.length <= 8;
-    el("hMore").textContent = showAll ? "Show fewer" : `Show all ${list.length}`;
+  function restore(s) { // undo a delete: newer than its tombstone, so it wins everywhere
+    state.deleted = state.deleted.filter(t => t.id !== s.id);
+    state.sessions = sortSessions([{ ...s, updatedAt: Date.now() }, ...state.sessions.filter(x => x.id !== s.id)]);
+    write(); render(); cloud.schedule();
+  }
+  function importMany(list) {
+    const before = state.sessions.length;
+    state = merge({ sessions: list.filter(x => x && x.id && typeof x.skips === "number" && (x.date || x.at)).map(x => ({ date: dayKey(x.at), ...x, updatedAt: x.updatedAt || Date.now() })), deleted: [] }, state);
+    write(); render(); cloud.schedule();
+    return state.sessions.length - before;
   }
 
   // ------------------------------------------------------------------ cloud
@@ -246,7 +204,7 @@
       try { await auth.signInWithPopup(p); }
       catch (e) {
         if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment", "auth/cancelled-popup-request"].includes(e.code)) await auth.signInWithRedirect(p);
-        else if (e.code !== "auth/popup-closed-by-user") { set("signed-out"); alert(`Sign-in failed: ${e.message}`); }
+        else if (e.code !== "auth/popup-closed-by-user") set("error", `sign-in failed: ${e.message}`);
       }
     }
     async function signOut() { if (!auth) return; await run(false); await auth.signOut(); }
@@ -255,7 +213,7 @@
       if (!root.firebase) { set("unconfigured"); return; }
       try { firebase.initializeApp(cfg, "skipcount"); const app = firebase.app("skipcount"); auth = app.auth(); db = app.firestore(); }
       catch (e) { set("error", e.message); return; }
-      auth.getRedirectResult().catch(e => alert(`Sign-in failed: ${e.message}`));
+      auth.getRedirectResult().catch(e => set("error", `sign-in failed: ${e.message}`));
       auth.onAuthStateChanged(u => {
         user = u ? { uid: u.uid, email: u.email || "" } : null; pushed.clear(); pushedMeta = ""; lastPull = 0;
         if (u) run(true); else set("signed-out");
@@ -270,13 +228,11 @@
   function touchProfile() { try { localStorage.setItem(PKEY, String(Date.now())); } catch {} cloud.schedule(); }
 
   // ------------------------------------------------------------------ wire up
-  el("saveBtn").addEventListener("click", savePending);
-  el("hList").addEventListener("click", e => { const id = e.target.closest("[data-del]")?.dataset.del; if (id) removeSession(id); });
-  el("hMore").addEventListener("click", () => { showAll = !showAll; render(); });
-  el("cloudIn").addEventListener("click", () => cloud.signIn());
-  el("cloudOut").addEventListener("click", () => cloud.signOut());
-  el("cloudSync").addEventListener("click", () => cloud.syncNow());
+  const on = (id, f) => el(id)?.addEventListener("click", f);
+  on("cloudIn", () => cloud.signIn());
+  on("cloudOut", () => cloud.signOut());
+  on("cloudSync", () => cloud.syncNow());
   addEventListener("storage", e => { if (e.key === KEY) { state = read(); render(); } });
-  render(); cloud.init(); cloud.paint();
-  root.SkipJournal = { offer, touchProfile, render };
+  cloud.init(); cloud.paint();
+  root.SkipJournal = { list: () => state.sessions, add, update, remove, restore, importMany, onChange: f => listeners.add(f), touchProfile, syncNow: () => cloud.syncNow() };
 })(typeof window !== "undefined" ? window : globalThis);

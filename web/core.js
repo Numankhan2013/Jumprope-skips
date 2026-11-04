@@ -10,25 +10,42 @@
   // textured blocks that moved (high fraction = the camera itself moved).
   const B = 8, R = 4, K = 2 * R + 1;
 
-  // Full search for one block. Returns sub-pixel displacement, SAD at the best
-  // shift, and the SAD table.
+  // Candidate shifts, nearest first (ties in the original dy-major order). With
+  // "only replace on strictly better", this reproduces the exhaustive search's
+  // tie-break exactly (smallest shift wins), while letting us stop early.
+  const OFFS = (() => {
+    const o = [];
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) o.push([dy, dx, dx * dx + dy * dy, o.length]);
+    o.sort((a, b) => a[2] - b[2] || a[3] - b[3]);
+    return Int8Array.from(o.flatMap(v => [v[0], v[1]]));
+  })();
+
+  // Sum of absolute differences for one shift; gives up (returns >= limit) as
+  // soon as the running total can no longer beat `limit`.
+  function sad(prev, cur, w, bx, by, dx, dy, limit) {
+    let s = 0;
+    for (let y = 0; y < B; y++) {
+      const co = (by + y) * w + bx, po = co - dy * w - dx;
+      for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
+      if (s >= limit) return s;
+    }
+    return s;
+  }
+
+  // Best shift for one block, with sub-pixel refinement. Results land in the
+  // module-level fields below (no allocation per block).
+  let _fy = 0, _fx = 0, _best = 0, _bdx = 0, _bdy = 0;
   function searchBlock(prev, cur, w, bx, by) {
     let best = Infinity, bdx = 0, bdy = 0;
-    const sad = new Float64Array(K * K);
-    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-      let s = 0;
-      for (let y = 0; y < B; y++) {
-        const co = (by + y) * w + bx, po = (by + y - dy) * w + bx - dx;
-        for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
-      }
-      sad[(dy + R) * K + dx + R] = s;
-      if (s < best || (s === best && dx * dx + dy * dy < bdx * bdx + bdy * bdy)) { best = s; bdx = dx; bdy = dy; }
+    for (let i = 0; i < OFFS.length; i += 2) {
+      const dy = OFFS[i], dx = OFFS[i + 1];
+      const s = sad(prev, cur, w, bx, by, dx, dy, best);
+      if (s < best) { best = s; bdx = dx; bdy = dy; if (s === 0) break; }
     }
-    const at = (dx, dy) => sad[(dy + R) * K + dx + R];
     let fy = bdy, fx = bdx;
-    if (bdy > -R && bdy < R) { const a = at(bdx, bdy - 1), c = at(bdx, bdy + 1), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
-    if (bdx > -R && bdx < R) { const a = at(bdx - 1, bdy), c = at(bdx + 1, bdy), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
-    return { fy, fx, best, sadAt: at };
+    if (bdy > -R && bdy < R) { const a = sad(prev, cur, w, bx, by, bdx, bdy - 1, Infinity), c = sad(prev, cur, w, bx, by, bdx, bdy + 1, Infinity), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
+    if (bdx > -R && bdx < R) { const a = sad(prev, cur, w, bx, by, bdx - 1, bdy, Infinity), c = sad(prev, cur, w, bx, by, bdx + 1, bdy, Infinity), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
+    _fy = fy; _fx = fx; _best = best; _bdx = bdx; _bdy = bdy;
   }
 
   function isTextured(cur, w, bx, by) { // flat blocks (sky, plain wall) can't be matched
@@ -48,7 +65,7 @@
     for (let by = R; by + B + R <= h; by += B) for (let bx = R; bx + B + R <= w; bx += B) {
       if (!isTextured(cur, w, bx, by)) continue;
       blocks.push([bx, by]);
-      if (isBackground(bx, by, w, h)) { const s = searchBlock(prev, cur, w, bx, by); gys.push(s.fy); gxs.push(s.fx); }
+      if (isBackground(bx, by, w, h)) { searchBlock(prev, cur, w, bx, by); gys.push(_fy); gxs.push(_fx); }
     }
     let gy = 0, gx = 0;
     if (gys.length >= 6) { gy = median(gys); gx = median(gxs); }
@@ -63,10 +80,13 @@
         for (let y = 0; y < B; y++) { const o = (by + y) * w + bx; for (let x = 0; x < B; x++) { const d = cur[o + x] - prev[o + x]; z += d < 0 ? -d : d; } }
         if (z < 2 * B * B) continue;
       }
-      const s = searchBlock(prev, cur, w, bx, by);
+      searchBlock(prev, cur, w, bx, by);
       // must match clearly better than "moved with the camera"
-      if (s.sadAt(rx, ry) - s.best < 2 * B * B) continue;
-      const dy = s.fy - gy, dx = s.fx - gx;
+      if (Math.abs(rx) <= R && Math.abs(ry) <= R) {
+        const camSad = (rx === _bdx && ry === _bdy) ? _best : sad(prev, cur, w, bx, by, rx, ry, _best + 2 * B * B);
+        if (camSad - _best < 2 * B * B) continue;
+      }
+      const dy = _fy - gy, dx = _fx - gx;
       if (Math.hypot(dx, dy) < 0.3) continue;
       vys.push(dy); vxs.push(dx); rows.push(by);
     }
@@ -268,10 +288,14 @@
   class Tracker {
     constructor(w, h) { this.w = w; this.h = h; this.prev = null; this.vy = []; this.vx = []; this.valid = []; this.ts = []; this.spans = []; }
     push(gray, t) {
-      this.ts.push(t == null ? this.ts.length / 30 : t);
       let m = { vy: 0, vx: 0, frac: 0 };
       if (this.prev) m = frameMotion(this.prev, gray, this.w, this.h);
       this.prev = gray;
+      this.pushMotion(m, t);
+    }
+    // Add a motion result computed elsewhere (e.g. by a worker), in frame order.
+    pushMotion(m, t) {
+      this.ts.push(t == null ? this.ts.length / 30 : t);
       this.vy.push(m.vy); this.vx.push(m.vx); this.valid.push(m.frac < 0.6);
       if (Number.isFinite(m.span) && m.frac < 0.6) this.spans.push(m.span);
     }

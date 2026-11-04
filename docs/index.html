@@ -7,315 +7,489 @@
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 <meta charset="utf-8">
 <title>Skip Count</title>
-<meta name="description" content="Count jump-rope skips in a video and estimate calories. Runs on your phone; the video is never uploaded.">
+<meta name="description" content="Count jump-rope skips from a video or live camera, track calories and see your consistency. Runs on your phone; nothing is uploaded.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Geist:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: one phone-width column, scoreboard numerals up top, details below. */
+/* Layout: app shell — top bar, one 600px column, bottom tab bar on phones / side rail on desktop.
+   Quiet neutrals, one black hero card, rope-orange accent, scoreboard numerals. */
 :root {
-  --bg: #eef1f4;
+  --bg: #f7f7f6;
   --surface: #ffffff;
-  --ink: #15212c;
-  --muted: #5c6b78;
-  --line: #d6dde4;
+  --sunken: #f1f1ef;
+  --ink: #111111;
+  --muted: #6b6b6b;
+  --line: #e7e7e4;
+  --hero: #141414;
+  --hero-ink: #f5f5f4;
   --rope: #ef5a24;
-  --rope-soft: #fde3d7;
+  --rope-soft: #fde6dc;
   --track: #2b6cb0;
   --good: #1f8a5b;
+  --heat0: #ececea; --heat1: #fcd2c0; --heat2: #f7a07c; --heat3: #f2733f; --heat4: #c8400f;
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
-  --body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --radius: 14px;
+  --body: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 16px;
+  --spring: cubic-bezier(.34, 1.36, .5, 1);
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f161d; --surface: #17212b; --ink: #e8eef3; --muted: #93a3b1; --line: #2a3742;
-    --rope: #ff7a45; --rope-soft: #3a2219; --track: #6aa6e8; --good: #4cc38a; color-scheme: dark;
+    --bg: #0c0c0d; --surface: #161617; --sunken: #1d1d1f; --ink: #f2f2f1; --muted: #9a9a9a; --line: #2a2a2c;
+    --hero: #1f1f21; --hero-ink: #f5f5f4; --rope: #ff7a45; --rope-soft: #3b2219; --track: #6aa6e8; --good: #4cc38a;
+    --heat0: #232325; --heat1: #4a2416; --heat2: #8a3a1a; --heat3: #d2541f; --heat4: #ff8a55; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f161d; --surface: #17212b; --ink: #e8eef3; --muted: #93a3b1; --line: #2a3742;
-  --rope: #ff7a45; --rope-soft: #3a2219; --track: #6aa6e8; --good: #4cc38a; color-scheme: dark;
+  --bg: #0c0c0d; --surface: #161617; --sunken: #1d1d1f; --ink: #f2f2f1; --muted: #9a9a9a; --line: #2a2a2c;
+  --hero: #1f1f21; --hero-ink: #f5f5f4; --rope: #ff7a45; --rope-soft: #3b2219; --track: #6aa6e8; --good: #4cc38a;
+  --heat0: #232325; --heat1: #4a2416; --heat2: #8a3a1a; --heat3: #d2541f; --heat4: #ff8a55; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body {
-  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 20px 48px;
-}
-main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-h1, h2, .num { font-family: var(--display); }
-h1 { font-size: 2.4rem; line-height: 1; margin: 0; letter-spacing: 0.01em; text-transform: uppercase; font-weight: 800; }
-h1 span { color: var(--rope); }
-h2 { font-size: 1.15rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 0; font-weight: 700; }
-.lede { color: var(--muted); margin: 6px 0 0; text-wrap: pretty; }
+html, body { background: var(--bg); }
+body { color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; margin: 0; -webkit-tap-highlight-color: transparent; }
+.wrap { max-width: 600px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px 120px; display: flex; flex-direction: column; gap: 16px; }
+.view { display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+.num { font-family: var(--display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+/* top bar */
+.topbar { display: flex; align-items: center; gap: 10px; padding-block: 14px 0; }
+.logo { width: 34px; height: 34px; border-radius: 10px; background: var(--rope); display: grid; place-items: center; color: #fff; flex: none; }
+.brand { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.01em; }
+.topbar .spacer { flex: 1; }
+.icon-btn { width: 40px; height: 40px; border-radius: 99px; background: transparent; color: var(--ink); display: grid; place-items: center; }
+.icon-btn:hover { background: var(--sunken); }
+
+/* greeting */
+.hello { margin-top: 10px; }
+.hello .date { color: var(--muted); font-size: 0.95rem; }
+.hello h1 { font-size: 2rem; letter-spacing: -0.03em; font-weight: 700; line-height: 1.15; }
+
+/* cards */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
-label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); font-weight: 500; }
-.field { display: flex; gap: 6px; }
-input, select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%; }
-select { width: auto; flex: none; min-width: 4.6rem; padding-right: 8px; }
-input:focus-visible, select:focus-visible, button:focus-visible, .seg label:focus-within { outline: 3px solid var(--track); outline-offset: 1px; }
-.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.seg label { flex: 1; flex-direction: row; justify-content: center; padding: 10px 6px; cursor: pointer; color: var(--ink); font-size: 0.95rem; }
-.seg input { position: absolute; opacity: 0; width: 1px; }
-.seg label:has(input:checked) { background: var(--ink); color: var(--bg); }
-button, .pick {
-  font: inherit; font-weight: 600; border: 0; border-radius: 12px; padding: 14px 18px; cursor: pointer;
-  background: var(--rope); color: #fff; text-align: center; display: block;
-}
-button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
-.pick { font-family: var(--display); font-size: 1.4rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 18px; }
-.pick input { display: none; }
-.pick:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
-.note { font-size: 0.85rem; color: var(--muted); margin: 0; }
-details summary { cursor: pointer; font-weight: 600; }
-details ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
-.progress { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
-.progress div { height: 100%; width: 0; background: var(--rope); transition: width 0.2s; }
-.score { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.score .num { font-size: 5.2rem; line-height: 0.9; font-weight: 800; color: var(--rope); font-variant-numeric: tabular-nums; }
-.score .unit { font-family: var(--display); font-size: 1.6rem; text-transform: uppercase; font-weight: 700; }
-.tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.section-head h2 { font-size: 1.25rem; letter-spacing: -0.02em; font-weight: 700; }
+.label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); margin: 0; }
+.hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+
+/* buttons: a quick spring on press, like a physical key */
+button, .btn { font: inherit; cursor: pointer; border: 0; border-radius: 12px; transition: transform .2s var(--spring), background-color .2s, color .2s, box-shadow .2s, opacity .2s; }
+button:active, .btn:active { transform: scale(.96); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 18px; font-weight: 600; text-decoration: none; }
+.btn-light { background: #fff; color: #111; }
+.btn-ghost-dark { background: rgba(255,255,255,.07); color: var(--hero-ink); border: 1px solid rgba(255,255,255,.18); }
+.btn-ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.btn-accent { background: var(--rope); color: #fff; }
+.btn-small { padding: 8px 12px; font-size: 0.9rem; border-radius: 10px; }
+.btn input[type=file] { display: none; }
+:focus-visible { outline: 3px solid var(--track); outline-offset: 2px; }
+.btn:focus-within { outline: 3px solid var(--track); outline-offset: 2px; }
+
+/* streak strip */
+.streak { flex-direction: row; align-items: center; gap: 12px; padding: 14px; }
+.streak .count { min-width: 0; }
+.flame { width: 44px; height: 44px; border-radius: 12px; background: var(--sunken); display: grid; place-items: center; color: var(--muted); flex: none; transition: background-color .3s, color .3s; }
+.flame.on { background: var(--rope-soft); color: var(--rope); }
+.streak .count { font-size: 2rem; font-weight: 700; line-height: 1; white-space: nowrap; }
+.streak .count small { font-size: 0.95rem; font-weight: 500; color: var(--muted); margin-left: 5px; font-family: var(--body); }
+.week { margin-left: auto; display: flex; gap: 5px; flex: none; }
+.week div { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.66rem; color: var(--muted); font-weight: 600; }
+.week i { width: 18px; height: 18px; border-radius: 99px; border: 1.5px dashed var(--line); display: block; }
+.week i.done { border: 0; background: var(--rope); }
+.week i.today { border: 2px solid var(--ink); }
+.week i.done.today { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+
+/* hero */
+.hero { background: var(--hero); color: var(--hero-ink); border: 0; position: relative; overflow: hidden; padding: 22px; gap: 16px; }
+.hero::after { content: ""; position: absolute; inset: 0 0 auto auto; width: 60%; height: 70%; pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,.16) 1px, transparent 1.3px); background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(225deg, #000 10%, transparent 70%); mask-image: linear-gradient(225deg, #000 10%, transparent 70%); }
+.hero > * { position: relative; z-index: 1; }
+.hero .kicker { color: rgba(245,245,244,.62); font-size: 0.92rem; }
+.hero h2 { font-size: 1.45rem; letter-spacing: -0.02em; font-weight: 650; line-height: 1.25; }
+.hero .actions { display: grid; gap: 10px; }
+.hero .actions .btn { width: 100%; padding: 16px; font-size: 1.02rem; }
+.hero .foot { color: rgba(245,245,244,.55); font-size: 0.82rem; margin: 0; }
+.progress-wrap { display: flex; flex-direction: column; gap: 10px; }
+.progress-big { font-family: var(--display); font-size: 3.4rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.progress { height: 8px; background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--rope); border-radius: 99px; transition: width .35s var(--ease-out); }
+.progress-text { color: rgba(245,245,244,.72); font-size: 0.9rem; margin: 0; }
+.error { color: #ff9b74; font-weight: 600; margin: 0; }
+details.tips summary { cursor: pointer; color: rgba(245,245,244,.82); font-size: 0.9rem; }
+details.tips ul { margin: 8px 0 0; padding-left: 18px; color: rgba(245,245,244,.7); font-size: 0.9rem; }
+
+/* live */
+.live { position: relative; border-radius: 14px; overflow: hidden; background: #000; }
+.live video { width: 100%; max-height: 62vh; display: block; object-fit: cover; }
+.live .big { position: absolute; left: 14px; top: 6px; font-family: var(--display); font-weight: 800; font-size: 5.4rem; line-height: 1; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
+.live .time { position: absolute; right: 12px; top: 12px; background: rgba(0,0,0,.55); color: #fff; border-radius: 99px; padding: 3px 10px; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.live .rec { width: 8px; height: 8px; background: #ff4d4d; border-radius: 99px; display: inline-block; margin-right: 6px; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+
+/* results */
 .example { align-self: flex-start; background: var(--rope-soft); color: var(--ink); border-radius: 99px; padding: 3px 10px; font-size: 0.8rem; font-weight: 600; }
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 2px solid var(--ink); min-width: 0; }
+.score { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.score .num { font-size: 5.4rem; line-height: 0.88; font-weight: 800; color: var(--rope); }
+.score .unit { font-family: var(--display); font-size: 1.6rem; text-transform: uppercase; font-weight: 700; }
+.saved { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.88rem; color: var(--good); font-weight: 600; }
+input[type=date] { font: inherit; color: var(--ink); background: var(--sunken); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+.saved input[type=date] { font-size: 0.85rem; padding: 4px 8px; border-radius: 8px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 10px; }
+.stat { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 2px solid var(--ink); min-width: 0; }
 .stat b { font-family: var(--display); font-size: 1.7rem; line-height: 1.05; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat span { font-size: 0.78rem; color: var(--muted); }
-.sets { display: flex; flex-wrap: wrap; gap: 6px; }
-.sets button { background: var(--bg); color: var(--ink); border: 1px solid var(--line); padding: 6px 10px; border-radius: 99px; font-family: var(--display); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-.sets button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.chart { width: 100%; height: 150px; display: block; background: var(--bg); border-radius: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { background: var(--sunken); color: var(--ink); border: 1px solid var(--line); padding: 5px 11px; border-radius: 99px; font-family: var(--display); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chart { width: 100%; height: 140px; display: block; background: var(--sunken); border-radius: 12px; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.warn { background: var(--rope-soft); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; margin: 0; }
+
+/* calories */
 .kcal { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.kcal .num { font-size: 3.6rem; line-height: 0.95; font-weight: 800; font-variant-numeric: tabular-nums; }
+.kcal .num { font-size: 3.6rem; line-height: 0.95; font-weight: 800; display: inline-block; transform-origin: left bottom; }
+.kcal .num.flash { animation: flash .9s var(--ease-out); }
+@keyframes flash { 0% { color: var(--rope); transform: scale(1.08); } 100% { color: var(--ink); transform: scale(1); } }
 .kcal .unit { font-family: var(--display); font-size: 1.3rem; font-weight: 700; text-transform: uppercase; }
+.updated { font-size: 0.84rem; font-weight: 600; color: var(--good); min-height: 1.3em; margin-top: -8px; opacity: 0; transform: translateY(4px); transition: opacity .3s, transform .45s var(--spring); }
+.updated.show { opacity: 1; transform: none; }
+fieldset.you { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 14px; margin: 0; background: var(--sunken); min-width: 0; }
+fieldset.you legend { font-weight: 600; font-size: 0.9rem; padding: 0 6px; }
+.you-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.f { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); font-weight: 500; min-width: 0; }
+.field { display: flex; gap: 6px; }
+input[type=number], select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; width: 100%; }
+select { width: auto; flex: none; min-width: 4.6rem; padding-right: 8px; }
+.seg2 { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.seg2 label { flex: 1; display: flex; justify-content: center; padding: 10px 6px; cursor: pointer; color: var(--ink); font-size: 0.95rem; transition: background-color .2s, color .2s; }
+.seg2 input { position: absolute; opacity: 0; width: 1px; }
+.seg2 label:has(input:checked) { background: var(--ink); color: var(--bg); }
+.seg2 label:has(input:focus-visible) { outline: 3px solid var(--track); outline-offset: -3px; }
 .lines { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-variant-numeric: tabular-nums; }
 .lines dt { color: var(--muted); }
 .lines dd { margin: 0; font-weight: 600; text-align: right; }
-.player { position: relative; border-radius: 10px; overflow: hidden; background: #000; }
+details.more summary { cursor: pointer; font-weight: 600; }
+details.more ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+
+/* player */
+.player { position: relative; border-radius: 12px; overflow: hidden; background: #000; }
 .player video { width: 100%; max-height: 70vh; display: block; }
-.player .overlay { position: absolute; top: 10px; left: 12px; font-family: var(--display); font-weight: 800; font-size: 3rem; line-height: 1; color: #fff; text-shadow: 0 2px 6px #000, 0 0 2px #000; pointer-events: none; font-variant-numeric: tabular-nums; }
+.player .overlay { position: absolute; top: 10px; left: 12px; font-family: var(--display); font-weight: 800; font-size: 3rem; line-height: 1; color: #fff; text-shadow: 0 2px 6px #000; pointer-events: none; font-variant-numeric: tabular-nums; }
 .player .overlay.flash { color: #ffb38f; }
-.error { color: var(--rope); font-weight: 600; margin: 0; }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.center { text-align: center; }
-.hero { gap: 12px; }
-.pick { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 10px; color: #fff; }
-.label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--muted); margin: 0 0 6px; font-family: var(--body); }
-.hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
-.you { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 14px; margin: 0; background: var(--bg); transition: border-color 0.3s; }
-.you legend { font-weight: 600; font-size: 0.9rem; padding: 0 6px; }
-.you-hint { margin: 0 0 10px; }
-.you input, .you select { background: var(--surface); }
-.you-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-.flabel { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
-.sexbox { display: flex; flex-direction: column; gap: 4px; }
-.seg label { background: var(--surface); }
-.updated { font-size: 0.8rem; font-weight: 600; color: var(--good); opacity: 0; transition: opacity 0.3s; align-self: center; }
-.updated.show { opacity: 1; }
-.kcal .num.flash { animation: flash 0.9s ease-out; }
-@keyframes flash { 0% { color: var(--rope); transform: scale(1.08); } 100% { color: var(--ink); transform: scale(1); } }
-.kcal .num { display: inline-block; transform-origin: left bottom; }
-.manual { gap: 12px; }
-.manual summary { font-weight: 600; }
-.manual[open] summary { margin-bottom: 4px; }
-.save-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.tiles .stat b { font-size: 1.5rem; }
-.bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; height: 110px; align-items: end; }
-.bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; min-width: 0; }
-.bar i { display: block; width: 100%; background: var(--rope); border-radius: 4px 4px 0 0; min-height: 0; }
-.bar span { font-size: 0.7rem; color: var(--muted); line-height: 1; }
-.insights { margin: 0; padding-left: 18px; color: var(--ink); display: flex; flex-direction: column; gap: 4px; }
-.sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.sessions li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
-.sessions b { font-family: var(--display); font-size: 1.35rem; font-variant-numeric: tabular-nums; }
-.sessions .del { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 4px 11px; border-radius: 99px; font-size: 1.1rem; flex: none; }
-.btns { display: flex; gap: 10px; flex-wrap: wrap; }
-.btns button { flex: 1; min-width: 130px; }
-@media (max-width: 380px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
-footer { color: var(--muted); font-size: 0.85rem; }
-footer p { margin: 0 0 8px; }
-@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.2rem; } }
-@media (max-width: 360px) { .you-grid { grid-template-columns: 1fr; } }
-@media (prefers-reduced-motion: reduce) { .progress div, .updated { transition: none; } .kcal .num.flash { animation: none; } }
+
+/* segmented control with a sliding pill */
+.seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--sunken); border-radius: 12px; padding: 4px; border: 1px solid var(--line); }
+.seg .pill { position: absolute; top: 4px; bottom: 4px; left: 0; width: 0; border-radius: 9px; background: var(--surface); box-shadow: 0 1px 3px rgba(0,0,0,.1); transition: transform .5s var(--spring), width .5s var(--spring); }
+.seg button { position: relative; z-index: 1; background: transparent; color: var(--muted); padding: 8px 6px; font-weight: 600; font-size: 0.92rem; border-radius: 9px; }
+.seg button[aria-pressed="true"] { color: var(--ink); }
+.seg.small { padding: 3px; border-radius: 10px; }
+.seg.small .pill { top: 3px; bottom: 3px; border-radius: 7px; }
+.seg.small button { padding: 4px 10px; font-size: 0.8rem; }
+
+/* insights */
+.period { display: flex; align-items: center; gap: 8px; }
+.period .title { flex: 1; text-align: center; font-weight: 600; }
+.round { width: 40px; height: 40px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; flex: none; }
+.round:disabled { opacity: .35; cursor: default; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile b { font-family: var(--display); font-size: 2.1rem; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 0.85rem; }
+.tile .delta { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.tile .delta.up { color: var(--good); }
+.bars { height: 170px; display: flex; align-items: stretch; gap: 3px; padding-top: 22px; }
+.bars .col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; position: relative; background: none; padding: 0; border-radius: 6px; color: inherit; }
+.bars .col .bar { width: 100%; max-width: 30px; flex: 1; display: flex; align-items: flex-end; }
+.bars .col i { display: block; width: 100%; background: var(--rope); border-radius: 5px 5px 2px 2px; transform-origin: bottom; transform: scaleY(0); transition: transform .65s var(--spring); }
+.bars .col i.zero { background: var(--line); height: 3px !important; }
+.bars.in .col i { transform: scaleY(1); }
+.bars .col em { font-style: normal; font-size: 0.66rem; color: var(--muted); line-height: 1; white-space: nowrap; height: 0.7rem; }
+.bars .col .val { position: absolute; top: -20px; font-size: 0.75rem; font-weight: 700; color: var(--ink); opacity: 0; transform: translateY(3px); transition: opacity .2s, transform .3s var(--spring); white-space: nowrap; }
+.bars .col.sel .val { opacity: 1; transform: none; }
+.bars .col.sel i { background: var(--ink); }
+.heat-scroll { overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.heat { display: grid; grid-template-rows: 14px repeat(7, 12px); grid-auto-flow: column; grid-auto-columns: 12px; gap: 3px; width: max-content; }
+.heat .m { font-size: 0.66rem; color: var(--muted); white-space: nowrap; overflow: visible; }
+.heat .d { width: 12px; height: 12px; border-radius: 3px; background: var(--heat0); }
+.heat .d.l1 { background: var(--heat1); } .heat .d.l2 { background: var(--heat2); } .heat .d.l3 { background: var(--heat3); } .heat .d.l4 { background: var(--heat4); }
+.heat .d.future { background: transparent; }
+.heat .d.today { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.heat-legend { display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--muted); justify-content: flex-end; }
+.heat-legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.sess { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.sess:first-child { border-top: 0; padding-top: 0; }
+.sess:last-child { padding-bottom: 0; }
+.sess .when { min-width: 0; flex: 1; }
+.sess .when b { display: block; font-weight: 600; }
+.sess .when span { color: var(--muted); font-size: 0.85rem; }
+.sess .n { font-family: var(--display); font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sess .del { background: transparent; color: var(--muted); padding: 6px 9px; font-size: 0.82rem; border-radius: 8px; }
+.sess .del.confirm { color: #fff; background: #c62828; }
+.empty { text-align: center; padding: 22px 12px; color: var(--muted); }
+.empty b { color: var(--ink); display: block; font-size: 1.05rem; margin-bottom: 4px; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+details.card > summary { list-style: none; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary::after { content: "+"; float: right; color: var(--muted); font-weight: 400; }
+details.card[open] > summary::after { content: "–"; }
+
+/* toast */
+.toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 24px); opacity: 0; pointer-events: none; background: var(--ink); color: var(--bg); padding: 11px 14px; border-radius: 12px; font-size: 0.9rem; font-weight: 500; display: flex; gap: 14px; align-items: center; transition: opacity .25s, transform .5s var(--spring); z-index: 30; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast button { background: transparent; color: var(--rope); font-weight: 700; padding: 0; }
+
+/* bottom tab bar (phones) / side rail (desktop) */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--bg); background: color-mix(in srgb, var(--bg) 86%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.tabbar .inner { position: relative; max-width: 360px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; }
+.tabbar .pill { position: absolute; top: 0; left: 0; width: 64px; height: 34px; border-radius: 99px; background: var(--line); transition: transform .5s var(--spring); }
+.tabbar button { position: relative; background: transparent; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 0 0 2px; font-size: 0.8rem; font-weight: 500; }
+.tabbar button .ic { width: 64px; height: 34px; display: grid; place-items: center; }
+.tabbar button[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+@media (min-width: 900px) {
+  .tabbar { top: 0; right: auto; width: 96px; border-top: 0; border-right: 1px solid var(--line); padding: 0; display: flex; align-items: center; }
+  .tabbar .inner { grid-template-columns: 1fr; gap: 20px; width: 100%; }
+  .wrap { padding-block: 8px 48px; }
+  body { padding-left: 96px; }
+  .toast { bottom: 24px; }
+}
+@media (max-width: 430px) { .streak .count small { display: block; margin: 4px 0 0; font-size: 0.8rem; } .streak .count { font-size: 1.8rem; } .flame { width: 40px; height: 40px; } }
+@media (max-width: 380px) { .stats { grid-template-columns: repeat(2, 1fr); } .score .num { font-size: 4.4rem; } .you-grid, .row3 { grid-template-columns: 1fr; } .week { gap: 3px; } .week i { width: 17px; height: 17px; } .streak .count { font-size: 1.7rem; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0s !important; animation: none !important; }
+  .bars .col i { transform: none; }
+}
 </style>
 
 </head>
 <body>
-<main>
-  <header>
-    <h1>Skip <span>Count</span></h1>
-    <p class="lede">Count your jump-rope skips from a video and see the calories you burned.</p>
-  </header>
+<div class="wrap">
+  <div class="topbar">
+    <div class="logo" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 17c3-12 11-12 14 0"/><path d="M5 17v3M19 17v3"/></svg></div>
+    <span class="brand">Skip Count</span>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Switch between light and dark"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+  </div>
 
-  <section class="card hero" aria-labelledby="vid-h">
-    <h2 id="vid-h" class="sr-only">Your video</h2>
-    <label class="pick" for="file">
-      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg>
-      Choose skipping video<input id="file" type="file" accept="video/*">
-    </label>
-    <p class="note center">Your video stays on this phone. Nothing is uploaded.</p>
-    <div id="progressBox" hidden>
-      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="progressBar"><div></div></div>
-      <p class="note" id="progressText" aria-live="polite">Starting…</p>
+  <!-- ======================= COUNT ======================= -->
+  <section class="view" id="view-count" aria-label="Count">
+    <div class="hello"><div class="date" id="today"></div><h1 id="greet">Ready to skip?</h1></div>
+
+    <div class="card streak" id="streakCard">
+      <div class="flame" id="flame" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2s6 5.5 6 11a6 6 0 0 1-12 0c0-2.6 1.4-4.6 2.6-5.8.3 1.9 1.4 3 2.4 3.3C10.3 7.4 12 2 12 2z"/></svg></div>
+      <div class="count num" id="streakNum">0<small>day streak</small></div>
+      <div class="week" id="weekDots" aria-label="Days skipped this week"></div>
     </div>
-    <p class="error" id="error" hidden></p>
-    <details>
-      <summary>How to film it</summary>
-      <ul>
-        <li>Prop the phone up so it stays put.</li>
-        <li>Stand close enough to fill at least half the height of the picture. Keep your head and shoulders in frame.</li>
-        <li>Be the only person moving in the shot.</li>
-        <li>Any place works: grass, concrete, indoors. Sound isn't used.</li>
-      </ul>
-    </details>
-  </section>
 
-  <section class="card" id="results" aria-labelledby="res-h">
-    <span class="example" id="exampleTag">Example: a 39-second test clip, counted by hand at 51</span>
-    <div class="score"><span class="num" id="skips">51</span><span class="unit" id="res-h">skips</span></div>
-    <div class="stats">
-      <div class="stat"><b id="sJump">0:20</b><span>jumping</span></div>
-      <div class="stat"><b id="sPace">156</b><span>skips / min</span></div>
-      <div class="stat"><b id="sSets">5</b><span>sets</span></div>
-      <div class="stat"><b id="sRest">0:19</b><span>resting</span></div>
-      <div class="stat"><b id="sBest">19</b><span>best set</span></div>
-      <div class="stat"><b id="sLen">0:39</b><span>video length</span></div>
+    <div class="card hero" id="hero">
+      <div id="heroIdle">
+        <div class="kicker">Count a session</div>
+        <h2>Pick a video, or count live while you skip</h2>
+      </div>
+      <div class="actions" id="heroActions">
+        <label class="btn btn-light" for="file">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v1.6l3.4-2.3A1 1 0 0 1 21 6.6v10.8a1 1 0 0 1-1.6.8L16 15.9v1.6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5z"/></svg>
+          Choose a video<input id="file" type="file" accept="video/*">
+        </label>
+        <button class="btn btn-ghost-dark" id="liveBtn" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/></svg>
+          Count live with the camera
+        </button>
+      </div>
+      <div class="progress-wrap" id="progressBox" hidden>
+        <div class="progress-big" id="progressPct">0%</div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="progressBar"><div></div></div>
+        <p class="progress-text" id="progressText" aria-live="polite">Opening video…</p>
+      </div>
+      <div id="liveBox" hidden>
+        <div class="live"><video id="liveVideo" playsinline muted autoplay></video><div class="big" id="liveCount">0</div><div class="time"><span class="rec"></span><span id="liveTime">0:00</span></div></div>
+        <div class="actions" style="margin-top:12px"><button class="btn btn-accent" id="liveStop" type="button">Stop and save</button></div>
+        <p class="foot" style="margin-top:10px">Prop the phone up so it sees you from the shoulders up. The number updates every couple of seconds; the final count is worked out when you stop.</p>
+      </div>
+      <p class="error" id="error" hidden></p>
+      <details class="tips" id="tips">
+        <summary>How to film it</summary>
+        <ul>
+          <li>Prop the phone up so it stays put.</li>
+          <li>Fill at least half the height of the picture. Head and shoulders must stay in frame.</li>
+          <li>Be the only person moving in the shot. Any place works; sound isn't used.</li>
+          <li>For long sessions, count live: there's nothing to process afterwards.</li>
+        </ul>
+      </details>
+      <p class="foot" id="heroFoot">Everything runs on this phone. Nothing is uploaded.</p>
     </div>
-    <div>
-      <p class="label">Sets <span class="hint">tap one to zoom in</span></p>
-      <div class="sets" id="sets"></div>
-    </div>
-    <canvas class="chart" id="chart" aria-label="Bounce signal with each counted skip marked"></canvas>
-    <div class="legend"><span><i style="background:var(--track)"></i>your bounce</span><span><i style="background:var(--rope)"></i>counted skip</span><span><i style="background:var(--rope-soft)"></i>set</span></div>
-  </section>
 
-  <section class="card" id="calCard" aria-labelledby="cal-h">
-    <h2 id="cal-h" class="label">Calories burned</h2>
-    <div class="kcal"><span class="num" id="kTotal">5</span><span class="unit">kcal</span><span class="updated" id="updated" role="status" aria-live="polite"></span></div>
-    <p class="note" id="kRange">Likely range 4–6 kcal</p>
+    <section class="card" id="results" aria-label="Result">
+      <span class="example" id="exampleTag">Example: a 39-second test clip, counted by hand at 51</span>
+      <div class="score"><span class="num" id="skips">51</span><span class="unit">skips</span></div>
+      <div class="saved" id="savedRow" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <span>Saved to Insights for</span>
+        <input type="date" id="sessDate" aria-label="Session date">
+      </div>
+      <p class="warn" id="warnSmall" hidden>You look small in this video, which can add about one skip per set (the swing that starts it). Put the phone closer next time, so you fill at least half the picture's height.</p>
+      <p class="warn" id="warnSlow" hidden>This browser couldn't use the fast decoder, so the video was analysed while playing. The count can be off by a few.</p>
+      <div class="stats">
+        <div class="stat"><b id="sJump">0:20</b><span>jumping</span></div>
+        <div class="stat"><b id="sPace">155</b><span>skips / min</span></div>
+        <div class="stat"><b id="sSets">5</b><span>sets</span></div>
+        <div class="stat"><b id="sRest">0:19</b><span>resting</span></div>
+        <div class="stat"><b id="sBest">19</b><span>best set</span></div>
+        <div class="stat"><b id="sLen">0:39</b><span>length</span></div>
+      </div>
+      <div>
+        <p class="label" style="margin-bottom:8px">Sets <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">· tap one to zoom in</span></p>
+        <div class="chips" id="sets"></div>
+      </div>
+      <canvas class="chart" id="chart" aria-label="Your bounce, with each counted skip marked"></canvas>
+      <div class="legend"><span><i style="background:var(--track)"></i>your bounce</span><span><i style="background:var(--rope)"></i>counted skip</span><span><i style="background:var(--rope-soft)"></i>set</span></div>
+      <p class="hint" id="speedNote" hidden></p>
+    </section>
 
-    <fieldset class="you" id="you">
-      <legend>Based on you</legend>
-      <p class="hint you-hint">Change any of these and the calories update right away.</p>
-      <div class="you-grid">
-        <label for="weight">Weight
-          <span class="field"><input id="weight" type="number" inputmode="decimal" min="20" max="300" step="0.1" value="70">
-          <select id="weightUnit" aria-label="Weight unit"><option value="kg">kg</option><option value="lb">lb</option></select></span>
-        </label>
-        <label for="heightCm" id="heightCmWrap">Height
-          <span class="field"><input id="heightCm" type="number" inputmode="decimal" min="100" max="250" value="175">
-          <select id="heightUnit" aria-label="Height unit"><option value="cm">cm</option><option value="ft">ft/in</option></select></span>
-        </label>
-        <label for="heightFt" id="heightFtWrap" hidden>Height
-          <span class="field"><input id="heightFt" type="number" inputmode="numeric" min="3" max="8" value="5" aria-label="Feet">
-          <input id="heightIn" type="number" inputmode="decimal" min="0" max="11.9" value="9" aria-label="Inches">
-          <select id="heightUnit2" aria-label="Height unit"><option value="cm">cm</option><option value="ft" selected>ft/in</option></select></span>
-        </label>
-        <label for="age">Age
-          <input id="age" type="number" inputmode="numeric" min="10" max="100" value="25">
-        </label>
-        <div class="sexbox">
-          <span class="flabel">Sex</span>
-          <div class="seg" role="radiogroup" aria-label="Sex">
-            <label><input type="radio" name="sex" id="sexM" value="male" checked>Male</label>
-            <label><input type="radio" name="sex" id="sexF" value="female">Female</label>
+    <section class="card" id="calCard" aria-labelledby="cal-h">
+      <p class="label" id="cal-h">Calories burned</p>
+      <div class="kcal"><span class="num" id="kTotal">5.5</span><span class="unit">kcal</span></div>
+      <div class="updated" id="updated" role="status" aria-live="polite"></div>
+      <p class="hint" id="kRange">Likely range 4.7–6.3 kcal</p>
+      <fieldset class="you">
+        <legend>Based on you</legend>
+        <p class="hint" style="margin:0 0 10px">Change any of these and the calories update right away.</p>
+        <div class="you-grid">
+          <label class="f" for="weight">Weight
+            <span class="field"><input id="weight" type="number" inputmode="decimal" min="20" max="300" step="0.1" value="70">
+            <select id="weightUnit" aria-label="Weight unit"><option value="kg">kg</option><option value="lb">lb</option></select></span>
+          </label>
+          <label class="f" for="heightCm" id="heightCmWrap">Height
+            <span class="field"><input id="heightCm" type="number" inputmode="decimal" min="100" max="250" value="175">
+            <select id="heightUnit" aria-label="Height unit"><option value="cm">cm</option><option value="ft">ft/in</option></select></span>
+          </label>
+          <label class="f" for="heightFt" id="heightFtWrap" hidden>Height
+            <span class="field"><input id="heightFt" type="number" inputmode="numeric" min="3" max="8" value="5" aria-label="Feet">
+            <input id="heightIn" type="number" inputmode="decimal" min="0" max="11.9" value="9" aria-label="Inches">
+            <select id="heightUnit2" aria-label="Height unit"><option value="cm">cm</option><option value="ft" selected>ft/in</option></select></span>
+          </label>
+          <label class="f" for="age">Age<input id="age" type="number" inputmode="numeric" min="10" max="100" value="25"></label>
+          <div class="f">Sex
+            <div class="seg2" role="radiogroup" aria-label="Sex">
+              <label><input type="radio" name="sex" id="sexM" value="male" checked>Male</label>
+              <label><input type="radio" name="sex" id="sexF" value="female">Female</label>
+            </div>
           </div>
         </div>
-      </div>
-    </fieldset>
+      </fieldset>
+      <dl class="lines">
+        <dt>While jumping</dt><dd id="kJump">4.8 kcal</dd>
+        <dt>During rests</dt><dd id="kRest">0.7 kcal</dd>
+        <dt>Extra vs. sitting still</dt><dd id="kNet">4.8 kcal</dd>
+        <dt>Intensity</dt><dd id="kMet">12.3 MET</dd>
+        <dt>Your resting burn</dt><dd id="kRmr">1,674 kcal/day</dd>
+      </dl>
+      <details class="more">
+        <summary>How this is worked out</summary>
+        <ul>
+          <li>Intensity comes from your measured pace: rope jumping is 8.8 MET under 100 skips/min, 11.8 at 100–120, and 12.3 at 120–160 (Compendium of Physical Activities).</li>
+          <li>One MET is set to <em>your</em> resting metabolism from weight, height, age and sex (Mifflin-St Jeor), not a textbook average.</li>
+          <li>Rest time between sets counts at 2 MET. Any estimate like this is about ±15% for one person, hence the range.</li>
+        </ul>
+      </details>
+    </section>
 
-    <dl class="lines">
-      <dt>While jumping</dt><dd id="kJump">4 kcal</dd>
-      <dt>During rests</dt><dd id="kRest">1 kcal</dd>
-      <dt>Extra vs. sitting still</dt><dd id="kNet">4 kcal</dd>
-      <dt>Intensity</dt><dd id="kMet">12.3 MET</dd>
-      <dt>Your resting burn</dt><dd id="kRmr">1,674 kcal/day</dd>
-    </dl>
-    <details>
-      <summary>How this is worked out</summary>
-      <ul>
-        <li>Intensity comes from your measured pace: rope jumping is 8.8 MET under 100 skips/min, 11.8 at 100–120, and 12.3 at 120–160 (Compendium of Physical Activities).</li>
-        <li>One MET is set to <em>your</em> resting metabolism from weight, height, age and sex (Mifflin-St Jeor), not a textbook average.</li>
-        <li>Rest time between sets counts at 2 MET. Any estimate like this is about ±15% for one person, hence the range.</li>
-      </ul>
+    <section class="card" id="playerCard" aria-label="Check the count" hidden>
+      <p class="label">Check the count</p>
+      <div class="player"><video id="player" controls playsinline muted></video><div class="overlay" id="overlay">0</div></div>
+      <p class="hint">Play your video with the counter on top. If it goes up on every jump, the total is right.</p>
+    </section>
+  </section>
+
+  <!-- ======================= INSIGHTS ======================= -->
+  <section class="view" id="view-insights" aria-label="Insights" hidden>
+    <div class="hello"><div class="date">Your skipping</div><h1>Insights</h1></div>
+
+    <div class="seg" id="periodSeg" role="group" aria-label="Period">
+      <span class="pill"></span>
+      <button type="button" data-p="day">Day</button>
+      <button type="button" data-p="week" aria-pressed="true">Week</button>
+      <button type="button" data-p="month">Month</button>
+      <button type="button" data-p="year">Year</button>
+    </div>
+    <div class="period">
+      <button class="round" id="prevP" type="button" aria-label="Previous period"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="title" id="periodTitle">This week</div>
+      <button class="round" id="nextP" type="button" aria-label="Next period"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="card" id="barsCard">
+      <div class="section-head" style="margin:0"><p class="label" id="barsLabel">Per day</p>
+        <div class="seg small" id="metricSeg" role="group" aria-label="Measure">
+          <span class="pill"></span>
+          <button type="button" data-m="skips" aria-pressed="true">Skips</button>
+          <button type="button" data-m="kcal">kcal</button>
+          <button type="button" data-m="min">Minutes</button>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+
+    <div class="section-head"><h2>Consistency</h2><span class="muted" id="heatSummary"></span></div>
+    <div class="card">
+      <div class="heat-scroll" id="heatScroll"><div class="heat" id="heat" role="img" aria-label="Skips per day over the last year"></div></div>
+      <div class="heat-legend">Less <i style="background:var(--heat0)"></i><i style="background:var(--heat1)"></i><i style="background:var(--heat2)"></i><i style="background:var(--heat3)"></i><i style="background:var(--heat4)"></i> More</div>
+    </div>
+
+    <div class="section-head"><h2 id="sessHead">Sessions</h2><span class="muted" id="sessCount"></span></div>
+    <div class="card"><div id="sessions"></div></div>
+
+    <details class="card" id="manual">
+      <summary style="font-weight:600;cursor:pointer">Add a session by hand</summary>
+      <div class="row3">
+        <label class="f" for="mSkips">Skips<input id="mSkips" type="number" inputmode="numeric" min="1" placeholder="e.g. 5000"></label>
+        <label class="f" for="mMin">Min jumping<input id="mMin" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="e.g. 45"></label>
+        <label class="f" for="mRest">Min resting<input id="mRest" type="number" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 10"></label>
+      </div>
+      <label class="f" for="mDate">Date<input id="mDate" type="date"></label>
+      <button class="btn btn-accent" id="mGo" type="button">Add session</button>
     </details>
-  </section>
 
-  <section class="card" id="playerCard" aria-labelledby="pl-h" hidden>
-    <h2 id="pl-h" class="label">Check the count</h2>
-    <div class="player"><video id="player" controls playsinline muted></video><div class="overlay" id="overlay">0</div></div>
-    <p class="note">Play your video with the counter on top. If it goes up on every jump, the total is right.</p>
-  </section>
-
-  <section class="card" id="saveCard" aria-labelledby="save-h" hidden>
-    <h2 id="save-h" class="label">Save this session</h2>
-    <p class="note" id="saveSummary"></p>
-    <div class="save-row">
-      <label for="saveDate">Date<input id="saveDate" type="date"></label>
-      <label for="saveNote">Note (optional)<input id="saveNote" type="text" maxlength="140" placeholder="e.g. double unders"></label>
-    </div>
-    <button id="saveBtn" type="button">Save to history</button>
-  </section>
-
-  <section class="card" id="history" aria-labelledby="hist-h">
-    <h2 id="hist-h">Your history</h2>
-    <p class="note" id="histEmpty">Count a video or type in a session, then tap Save. Your totals, streaks and pace show up here.</p>
-    <div id="histBody" hidden>
-      <div class="tiles">
-        <div class="stat"><b id="hToday">0</b><span>today</span></div>
-        <div class="stat"><b id="hWeek">0</b><span>this week</span></div>
-        <div class="stat"><b id="hMonth">0</b><span>this month</span></div>
-        <div class="stat"><b id="hAll">0</b><span>all time</span></div>
-        <div class="stat"><b id="hStreak">0</b><span id="hStreakSub">day streak</span></div>
-        <div class="stat"><b id="hBestSet">0</b><span>best set ever</span></div>
-        <div class="stat"><b id="hPace">–</b><span>skips/min, last 5</span></div>
+    <div class="card">
+      <p class="label">Your data</p>
+      <p class="hint" id="cloudText">Loading…</p>
+      <div class="row-actions">
+        <button class="btn btn-accent btn-small" id="cloudIn" type="button" hidden>Sign in with Google</button>
+        <button class="btn btn-ghost btn-small" id="cloudSync" type="button" hidden>Sync now</button>
+        <button class="btn btn-ghost btn-small" id="cloudOut" type="button" hidden>Sign out</button>
       </div>
-      <p class="label" style="margin-top:16px">Last 14 days</p>
-      <div class="bars" id="hBars" aria-label="Skips per day over the last 14 days"></div>
-      <p class="label" style="margin-top:16px">Insights</p>
-      <ul class="insights" id="hLines"></ul>
-      <p class="label" style="margin-top:16px">Sessions</p>
-      <ul class="sessions" id="hList"></ul>
-      <button class="ghost" id="hMore" type="button" hidden>Show all</button>
+      <p class="hint">Not signed in, sessions stay on this device only. You can also keep a backup file:</p>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-small" id="exportBtn" type="button">Save backup</button>
+        <label class="btn btn-ghost btn-small" for="importFile">Restore backup<input id="importFile" type="file" accept="application/json,.json"></label>
+      </div>
     </div>
   </section>
+</div>
 
-  <section class="card" aria-labelledby="cloud-h">
-    <h2 id="cloud-h" class="label">Cloud sync</h2>
-    <p class="note" id="cloudText">Loading…</p>
-    <div class="btns">
-      <button id="cloudIn" type="button" hidden>Sign in with Google</button>
-      <button id="cloudSync" class="ghost" type="button" hidden>Sync now</button>
-      <button id="cloudOut" class="ghost" type="button" hidden>Sign out</button>
-    </div>
-  </section>
-
-  <details class="card manual">
-    <summary>Already know your count? Get calories without a video</summary>
-    <div class="row">
-      <label for="mSkips">Skips<input id="mSkips" type="number" inputmode="numeric" min="1" placeholder="e.g. 5000"></label>
-      <label for="mMin">Minutes jumping<input id="mMin" type="number" inputmode="decimal" min="0.1" step="0.1" placeholder="e.g. 45"></label>
-      <label for="mRest">Minutes resting<input id="mRest" type="number" inputmode="decimal" min="0" step="0.1" placeholder="e.g. 10"></label>
-    </div>
-    <button id="mGo" type="button">Show calories</button>
-  </details>
-
-  <footer>
-    <p><strong>How it counts.</strong> It follows how you move up and down from frame to frame, finds the rhythm of your jumps, and counts one skip per bounce. Pauses, the swing that starts a set, the hop where the rope catches your feet, and moments when the phone moves are left out.</p>
-    <p>Analysis runs in your browser and takes roughly a third to half of the video's length. Keep the screen on while it works.</p>
-  </footer>
-</main>
+<nav class="tabbar" aria-label="Sections">
+  <div class="inner" role="tablist">
+    <span class="pill" id="tabPill"></span>
+    <button type="button" role="tab" id="tab-count" data-tab="count" aria-controls="view-count" aria-selected="true"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17c3-12 11-12 14 0"/><path d="M5 17v3M19 17v3"/></svg></span>Count</button>
+    <button type="button" role="tab" id="tab-insights" data-tab="insights" aria-controls="view-insights" aria-selected="false"><span class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5M4 19h16M8 15l3.5-4 3 2.5L19 8"/></svg></span>Insights</button>
+  </div>
+</nav>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastText"></span><button type="button" id="toastAction" hidden>Undo</button></div>
 
 <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script>
+<script id="skipcore">
 // Jump-rope skip counter: the engine (runs in the browser and in Node).
 // A port of jumprope_counter/counter.py + calories.py, with a lightweight
 // block-matching motion tracker standing in for OpenCV's optical flow.
@@ -328,25 +502,42 @@ footer p { margin: 0 0 8px; }
   // textured blocks that moved (high fraction = the camera itself moved).
   const B = 8, R = 4, K = 2 * R + 1;
 
-  // Full search for one block. Returns sub-pixel displacement, SAD at the best
-  // shift, and the SAD table.
+  // Candidate shifts, nearest first (ties in the original dy-major order). With
+  // "only replace on strictly better", this reproduces the exhaustive search's
+  // tie-break exactly (smallest shift wins), while letting us stop early.
+  const OFFS = (() => {
+    const o = [];
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) o.push([dy, dx, dx * dx + dy * dy, o.length]);
+    o.sort((a, b) => a[2] - b[2] || a[3] - b[3]);
+    return Int8Array.from(o.flatMap(v => [v[0], v[1]]));
+  })();
+
+  // Sum of absolute differences for one shift; gives up (returns >= limit) as
+  // soon as the running total can no longer beat `limit`.
+  function sad(prev, cur, w, bx, by, dx, dy, limit) {
+    let s = 0;
+    for (let y = 0; y < B; y++) {
+      const co = (by + y) * w + bx, po = co - dy * w - dx;
+      for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
+      if (s >= limit) return s;
+    }
+    return s;
+  }
+
+  // Best shift for one block, with sub-pixel refinement. Results land in the
+  // module-level fields below (no allocation per block).
+  let _fy = 0, _fx = 0, _best = 0, _bdx = 0, _bdy = 0;
   function searchBlock(prev, cur, w, bx, by) {
     let best = Infinity, bdx = 0, bdy = 0;
-    const sad = new Float64Array(K * K);
-    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-      let s = 0;
-      for (let y = 0; y < B; y++) {
-        const co = (by + y) * w + bx, po = (by + y - dy) * w + bx - dx;
-        for (let x = 0; x < B; x++) { const d = cur[co + x] - prev[po + x]; s += d < 0 ? -d : d; }
-      }
-      sad[(dy + R) * K + dx + R] = s;
-      if (s < best || (s === best && dx * dx + dy * dy < bdx * bdx + bdy * bdy)) { best = s; bdx = dx; bdy = dy; }
+    for (let i = 0; i < OFFS.length; i += 2) {
+      const dy = OFFS[i], dx = OFFS[i + 1];
+      const s = sad(prev, cur, w, bx, by, dx, dy, best);
+      if (s < best) { best = s; bdx = dx; bdy = dy; if (s === 0) break; }
     }
-    const at = (dx, dy) => sad[(dy + R) * K + dx + R];
     let fy = bdy, fx = bdx;
-    if (bdy > -R && bdy < R) { const a = at(bdx, bdy - 1), c = at(bdx, bdy + 1), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
-    if (bdx > -R && bdx < R) { const a = at(bdx - 1, bdy), c = at(bdx + 1, bdy), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
-    return { fy, fx, best, sadAt: at };
+    if (bdy > -R && bdy < R) { const a = sad(prev, cur, w, bx, by, bdx, bdy - 1, Infinity), c = sad(prev, cur, w, bx, by, bdx, bdy + 1, Infinity), d = a - 2 * best + c; if (d > 0) fy += 0.5 * (a - c) / d; }
+    if (bdx > -R && bdx < R) { const a = sad(prev, cur, w, bx, by, bdx - 1, bdy, Infinity), c = sad(prev, cur, w, bx, by, bdx + 1, bdy, Infinity), d = a - 2 * best + c; if (d > 0) fx += 0.5 * (a - c) / d; }
+    _fy = fy; _fx = fx; _best = best; _bdx = bdx; _bdy = bdy;
   }
 
   function isTextured(cur, w, bx, by) { // flat blocks (sky, plain wall) can't be matched
@@ -366,7 +557,7 @@ footer p { margin: 0 0 8px; }
     for (let by = R; by + B + R <= h; by += B) for (let bx = R; bx + B + R <= w; bx += B) {
       if (!isTextured(cur, w, bx, by)) continue;
       blocks.push([bx, by]);
-      if (isBackground(bx, by, w, h)) { const s = searchBlock(prev, cur, w, bx, by); gys.push(s.fy); gxs.push(s.fx); }
+      if (isBackground(bx, by, w, h)) { searchBlock(prev, cur, w, bx, by); gys.push(_fy); gxs.push(_fx); }
     }
     let gy = 0, gx = 0;
     if (gys.length >= 6) { gy = median(gys); gx = median(gxs); }
@@ -381,10 +572,13 @@ footer p { margin: 0 0 8px; }
         for (let y = 0; y < B; y++) { const o = (by + y) * w + bx; for (let x = 0; x < B; x++) { const d = cur[o + x] - prev[o + x]; z += d < 0 ? -d : d; } }
         if (z < 2 * B * B) continue;
       }
-      const s = searchBlock(prev, cur, w, bx, by);
+      searchBlock(prev, cur, w, bx, by);
       // must match clearly better than "moved with the camera"
-      if (s.sadAt(rx, ry) - s.best < 2 * B * B) continue;
-      const dy = s.fy - gy, dx = s.fx - gx;
+      if (Math.abs(rx) <= R && Math.abs(ry) <= R) {
+        const camSad = (rx === _bdx && ry === _bdy) ? _best : sad(prev, cur, w, bx, by, rx, ry, _best + 2 * B * B);
+        if (camSad - _best < 2 * B * B) continue;
+      }
+      const dy = _fy - gy, dx = _fx - gx;
       if (Math.hypot(dx, dy) < 0.3) continue;
       vys.push(dy); vxs.push(dx); rows.push(by);
     }
@@ -586,10 +780,14 @@ footer p { margin: 0 0 8px; }
   class Tracker {
     constructor(w, h) { this.w = w; this.h = h; this.prev = null; this.vy = []; this.vx = []; this.valid = []; this.ts = []; this.spans = []; }
     push(gray, t) {
-      this.ts.push(t == null ? this.ts.length / 30 : t);
       let m = { vy: 0, vx: 0, frac: 0 };
       if (this.prev) m = frameMotion(this.prev, gray, this.w, this.h);
       this.prev = gray;
+      this.pushMotion(m, t);
+    }
+    // Add a motion result computed elsewhere (e.g. by a worker), in frame order.
+    pushMotion(m, t) {
+      this.ts.push(t == null ? this.ts.length / 30 : t);
       this.vy.push(m.vy); this.vx.push(m.vx); this.valid.push(m.frac < 0.6);
       if (Number.isFinite(m.span) && m.frac < 0.6) this.spans.push(m.span);
     }
@@ -625,142 +823,33 @@ footer p { margin: 0 0 8px; }
 })(typeof self !== "undefined" ? self : this);
 
 </script>
-<script>
-"use strict";
-const $ = id => document.getElementById(id);
-const W = 160; // analysis width in pixels (tested: 160 gives the best count)
+<script id="skipshrink">
+// Frame shrinking: a decoded video frame → a small grayscale image (160 px wide),
+// rotated upright. Runs in workers (VideoFrame → luma plane, no canvas) and on
+// the main thread (for <video>/<canvas> sources in the playback fallback).
+(function (root) {
+  "use strict";
+  // 8-bit formats whose first plane is luma (brightness): exactly what we need.
+  const LUMA_FORMATS = new Set(["I420", "I420A", "I422", "I444", "NV12"]);
 
-// ---------------------------------------------------------------- profile
-const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
-const profileIds = ["weight", "weightUnit", "heightCm", "heightUnit", "heightFt", "heightIn", "age"];
-function loadProfile() {
-  try {
-    const p = JSON.parse(store.get("skipcount.profile") || "null");
-    if (!p) return;
-    for (const id of profileIds) if (p[id] != null) $(id).value = p[id];
-    if (p.sex) $(p.sex === "female" ? "sexF" : "sexM").checked = true;
-    showHeightUnit(p.heightUnit || "cm");
-  } catch {}
-}
-function saveProfile() {
-  const p = {}; for (const id of profileIds) p[id] = $(id).value;
-  p.sex = document.querySelector('input[name="sex"]:checked').value;
-  store.set("skipcount.profile", JSON.stringify(p));
-  window.SkipJournal?.touchProfile();
-}
-function showHeightUnit(u) {
-  $("heightUnit").value = u; $("heightUnit2").value = u;
-  $("heightCmWrap").hidden = u !== "cm"; $("heightFtWrap").hidden = u === "cm";
-}
-function profile() {
-  let kg = parseFloat($("weight").value) || 70;
-  if ($("weightUnit").value === "lb") kg *= 0.45359237;
-  const cm = $("heightUnit").value === "cm" ? (parseFloat($("heightCm").value) || 175)
-    : (parseFloat($("heightFt").value) || 0) * 30.48 + (parseFloat($("heightIn").value) || 0) * 2.54;
-  return { kg, cm: cm || 175, age: parseFloat($("age").value) || 30, sex: document.querySelector('input[name="sex"]:checked').value };
-}
-
-// ---------------------------------------------------------------- formatting
-const fmtTime = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
-  return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
-const fmtInt = n => Math.round(n).toLocaleString();
-const fmtKcal = n => n < 20 ? (Math.round(n * 10) / 10).toLocaleString() : fmtInt(n); // short clips: show a decimal
-
-// ---------------------------------------------------------------- results
-let last = null; // { result, fps, duration }
-let calSource = null; // what the calories are for: { skips, jumpS, restS }
-function renderCalories(skips, jumpS, restS) {
-  calSource = { skips, jumpS, restS };
-  const p = profile(), c = SkipCore.calories(skips, jumpS, restS, p.kg, p.cm, p.age, p.sex);
-  $("kTotal").textContent = fmtKcal(c.total);
-  $("kRange").textContent = `Likely range ${fmtKcal(c.low)}–${fmtKcal(c.high)} kcal`;
-  $("kJump").textContent = `${fmtKcal(c.jumping)} kcal`;
-  $("kRest").textContent = `${fmtKcal(c.rest)} kcal`;
-  $("kNet").textContent = `${fmtKcal(c.net)} kcal`;
-  $("kMet").textContent = `${c.met.toFixed(1)} MET`;
-  $("kRmr").textContent = `${fmtInt(c.rmr)} kcal/day`;
-}
-function renderResult(r, isExample) {
-  last = r;
-  $("exampleTag").hidden = !isExample;
-  $("skips").textContent = fmtInt(r.skips);
-  $("sJump").textContent = fmtTime(r.jumpingSeconds);
-  $("sRest").textContent = fmtTime(r.restSeconds);
-  $("sPace").textContent = r.jumpingSeconds ? Math.round(60 * r.skips / r.jumpingSeconds) : "–";
-  $("sSets").textContent = r.sets.length;
-  $("sBest").textContent = r.sets.length ? Math.max(...r.sets.map(s => s.skips)) : 0;
-  $("sLen").textContent = fmtTime(r.totalSeconds);
-  const box = $("sets"); box.textContent = "";
-  r.sets.forEach((s, i) => {
-    const b = document.createElement("button"); b.type = "button"; b.textContent = s.skips;
-    b.setAttribute("aria-pressed", "false"); b.title = `Set ${i + 1}: ${s.skips} skips at ${fmtTime(s.start)}`;
-    b.onclick = () => {
-      const on = b.getAttribute("aria-pressed") !== "true";
-      box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", "false"));
-      b.setAttribute("aria-pressed", String(on));
-      drawChart(on ? [Math.max(0, s.start - 1.5), s.end + 1.5] : null);
-      if (on && !$("playerCard").hidden) { $("player").currentTime = Math.max(0, s.start - 0.5); }
-    };
-    box.appendChild(b);
-  });
-  drawChart(null);
-  renderCalories(r.skips, r.jumpingSeconds, r.restSeconds);
-}
-
-function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-function drawChart(range) {
-  const r = last, cv = $("chart"); if (!r || !r.filtered) return;
-  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
-  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
-  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
-  const fps = r.fps, x = r.filtered, n = x.length;
-  const [t0, t1] = range || [0, n / fps];
-  const i0 = Math.max(0, Math.floor(t0 * fps)), i1 = Math.min(n, Math.ceil(t1 * fps));
-  // scale to the bounces inside sets, so camera handling doesn't squash them
-  let amp = 1e-9;
-  for (const st of r.sets) for (let i = Math.max(i0, Math.floor(st.start * fps)); i < Math.min(i1, Math.ceil(st.end * fps)); i++) amp = Math.max(amp, Math.abs(x[i]));
-  if (amp === 1e-9) for (let i = i0; i < i1; i++) amp = Math.max(amp, Math.abs(x[i]));
-  const inSet = i => r.sets.some(st => i / fps >= st.start && i / fps <= st.end);
-  const X = t => (t - t0) / (t1 - t0) * w, Y = v => h / 2 - v / amp * (h / 2 - 12);
-  g.fillStyle = cssVar("--rope-soft");
-  for (const s of r.sets) if (s.end > t0 && s.start < t1) g.fillRect(X(s.start), 0, Math.max(1, X(s.end) - X(s.start)), h);
-  const clampY = v => Y(Math.max(-amp * 1.15, Math.min(amp * 1.15, v)));
-  const step = Math.max(1, Math.floor((i1 - i0) / (w * 2)));
-  g.strokeStyle = cssVar("--track"); g.lineWidth = 1.2;
-  for (const pass of [false, true]) { // faded outside sets, solid inside
-    g.globalAlpha = pass ? 1 : 0.3; g.beginPath(); let pen = false;
-    for (let i = i0; i < i1; i += step) {
-      if (inSet(i) !== pass) { pen = false; continue; }
-      let v = x[i];
-      if (step > 1) { let mn = v, mx = v; for (let k = i; k < Math.min(i + step, i1); k++) { mn = Math.min(mn, x[k]); mx = Math.max(mx, x[k]); } pen ? g.lineTo(X(i / fps), clampY(mx)) : g.moveTo(X(i / fps), clampY(mx)); pen = true; v = mn; }
-      pen ? g.lineTo(X(i / fps), clampY(v)) : g.moveTo(X(i / fps), clampY(v)); pen = true;
-    }
-    g.stroke();
+  function geometry(srcW, srcH, rotation, W) {
+    const rot = ((rotation % 360) + 360) % 360, swap = rot === 90 || rot === 270;
+    const outW = W, outH = Math.max(16, Math.round((swap ? srcW : srcH) / (swap ? srcH : srcW) * W / 2) * 2);
+    return { rot, swap, outW, outH, sw: swap ? outH : outW, sh: swap ? outW : outH };
   }
-  g.globalAlpha = 1;
-  g.fillStyle = cssVar("--rope");
-  for (const t of r.skipTimes) {
-    if (t < t0 || t > t1) continue;
-    if (range) { const v = x[Math.min(n - 1, Math.round(t * fps))]; g.beginPath(); g.arc(X(t), clampY(v), 3.5, 0, 7); g.fill(); }
-    else g.fillRect(X(t) - 0.75, 3, 1.5, 9); // overview: one tick per skip along the top
-  }
-}
-addEventListener("resize", () => drawChart(null));
-matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => drawChart(null));
 
-// ---------------------------------------------------------------- frame grabbing
-// Draw a frame (VideoFrame or <video>) into a small grayscale buffer, honouring rotation.
-function makeGrabber(srcW, srcH, rotation) {
-  const rot = ((rotation % 360) + 360) % 360, swap = rot === 90 || rot === 270;
-  const outW = W, outH = Math.max(16, Math.round((swap ? srcW : srcH) / (swap ? srcH : srcW) * W / 2) * 2);
-  // two-step downscale (big → ~4x → final) keeps fine detail from aliasing
-  const midW = outW * 4, midH = outH * 4;
-  const mid = new OffscreenCanvas(midW, midH), mg = mid.getContext("2d");
-  const small = new OffscreenCanvas(outW, outH), sg = small.getContext("2d", { willReadFrequently: true });
-  mg.imageSmoothingQuality = "high"; sg.imageSmoothingQuality = "high";
-  return {
-    w: outW, h: outH,
-    grab(src) {
+  function makeShrinker(srcW, srcH, rotation, W = 160) {
+    const G = geometry(srcW, srcH, rotation, W), { rot, swap, outW, outH, sw, sh } = G;
+
+    // canvas path: two-step downscale (big → 4x → final) so fine detail doesn't alias
+    let mid, mg, small, sg;
+    function canvasShrink(src) {
+      if (!mid) {
+        mid = new OffscreenCanvas(outW * 4, outH * 4); mg = mid.getContext("2d");
+        small = new OffscreenCanvas(outW, outH); sg = small.getContext("2d", { willReadFrequently: true });
+        mg.imageSmoothingQuality = "high"; sg.imageSmoothingQuality = "high";
+      }
+      const midW = outW * 4, midH = outH * 4;
       mg.save(); mg.translate(midW / 2, midH / 2); mg.rotate(rot * Math.PI / 180);
       const dw = swap ? midH : midW, dh = swap ? midW : midH;
       mg.drawImage(src, -dw / 2, -dh / 2, dw, dh); mg.restore();
@@ -769,251 +858,294 @@ function makeGrabber(srcW, srcH, rotation) {
       for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
       return g;
     }
-  };
-}
 
-function setProgress(frac, text) {
-  $("progressBox").hidden = false;
-  $("progressBar").firstElementChild.style.width = `${Math.min(100, frac * 100).toFixed(1)}%`;
-  $("progressBar").setAttribute("aria-valuenow", Math.round(frac * 100));
-  $("progressText").textContent = text;
-}
-
-// Path 1: WebCodecs + mp4box (fast, uses the hardware decoder). MP4 / MOV only.
-async function framesWebCodecs(file, onFrame) {
-  if (!("VideoDecoder" in window) || typeof MP4Box === "undefined") throw new Error("no webcodecs");
-  const mp4 = MP4Box.createFile();
-  let track = null, decoder = null, grabber = null, decimate = 1, frameNo = 0, sampleCount = 0, decodedCount = 0, failed = null;
-  const pending = [];
-  const ready = new Promise((res, rej) => {
-    mp4.onError = e => rej(new Error(String(e)));
-    mp4.onReady = info => {
-      track = info.videoTracks[0];
-      if (!track) return rej(new Error("No video track in this file."));
-      res();
-    };
-  });
-  const CHUNK = 4 << 20; let offset = 0, eof = false, followHint = true;
-  async function feed() {
-    if (eof) return;
-    const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
-    buf.fileStart = offset;
-    const next = mp4.appendBuffer(buf);
-    // Phase 1 follows mp4box's hint, which jumps over the video data to find the
-    // index (phones often put it at the end). Phase 2 reads the file in order.
-    offset = (followHint && typeof next === "number" && next > offset) ? next : offset + buf.byteLength;
-    if (offset >= file.size) { eof = true; mp4.flush(); }
-  }
-  let readyDone = false; ready.then(() => readyDone = true, () => readyDone = true);
-  while (!readyDone && !eof) await feed();
-  await ready;
-
-  const entry = mp4.getTrackById(track.id).mdia.minf.stbl.stsd.entries[0];
-  let description;
-  const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
-  if (box && (entry.avcC || entry.hvcC)) {
-    const ds = new DataStream(undefined, 0, DataStream.BIG_ENDIAN); box.write(ds);
-    description = new Uint8Array(ds.buffer, 8);
-  }
-  const config = { codec: track.codec.startsWith("vp08") ? "vp8" : track.codec, codedWidth: track.video.width, codedHeight: track.video.height };
-  if (description) config.description = description;
-  const sup = await VideoDecoder.isConfigSupported(config);
-  if (!sup.supported) throw new Error("decoder unsupported: " + track.codec);
-  const m = track.matrix || [65536, 0, 0, 0, 65536, 0, 0, 0, 0x40000000];
-  const rotation = Math.round(Math.atan2(m[1], m[0]) * 180 / Math.PI);
-  grabber = makeGrabber(track.video.width, track.video.height, rotation);
-  const fps = track.nb_samples / (track.movie_duration / track.movie_timescale || track.duration / track.timescale);
-  decimate = Math.max(1, Math.round(fps / 30));
-  const totalSamples = track.nb_samples;
-
-  const frames = []; // reorder buffer by timestamp
-  decoder = new VideoDecoder({
-    output: frame => {
-      decodedCount++;
-      frames.push({ t: frame.timestamp / 1e6, g: grabber.grab(frame) });
-      frame.close();
-    },
-    error: e => { failed = e; }
-  });
-  decoder.configure(config);
-  let nextNumber = 0; // mp4box may hand some samples over twice; keep each once
-  mp4.onSamples = (id, user, samples) => {
-    for (const s of samples) { if (s.number < nextNumber) continue; nextNumber = s.number + 1; pending.push(s); }
-  };
-  mp4.setExtractionOptions(track.id, null, { nbSamples: 60 });
-  mp4.start();
-  followHint = false; eof = false;
-  offset = mp4.seek(0, true).offset;
-  const started = performance.now();
-  const flushFrames = (all) => {
-    frames.sort((a, b) => a.t - b.t);
-    const keep = all ? 0 : 8; // B-frames can arrive slightly out of order
-    while (frames.length > keep) { const f = frames.shift(); if ((frameNo++ % decimate) === 0) onFrame(f.g, f.t, grabber); }
-  };
-  while (true) {
-    if (failed) throw failed;
-    while (pending.length && decoder.decodeQueueSize < 12) {
-      const s = pending.shift(); sampleCount++;
-      decoder.decode(new EncodedVideoChunk({ type: s.is_sync ? "key" : "delta", timestamp: 1e6 * s.cts / s.timescale, duration: 1e6 * s.duration / s.timescale, data: s.data }));
-      mp4.releaseUsedSamples(track.id, s.number + 1); // the chunk copied the bytes; free them
+    // luma path: copy the frame's brightness plane and box-average every 2nd
+    // pixel into the small grid. No canvas, no colour, ~4x less work.
+    let buf = null, colOf = null, rowOf = null, cnt = null, lumaBroken = false;
+    async function lumaShrink(frame) {
+      const vr = frame.visibleRect, W0 = vr.width, H0 = vr.height, size = frame.allocationSize();
+      if (!buf || buf.length < size) buf = new Uint8Array(size);
+      const layout = await frame.copyTo(buf);
+      const off = layout[0].offset, stride = layout[0].stride;
+      if (!colOf || colOf.length !== W0 || rowOf.length !== H0) {
+        colOf = new Uint16Array(W0); rowOf = new Uint16Array(H0); cnt = new Uint32Array(sw * sh);
+        for (let x = 0; x < W0; x++) colOf[x] = Math.min(sw - 1, Math.floor(x * sw / W0));
+        for (let y = 0; y < H0; y++) rowOf[y] = Math.min(sh - 1, Math.floor(y * sh / H0));
+        for (let y = 0; y < H0; y += 2) for (let x = 0; x < W0; x += 2) cnt[rowOf[y] * sw + colOf[x]]++;
+      }
+      const acc = new Uint32Array(sw * sh);
+      for (let y = 0; y < H0; y += 2) {
+        const o = off + y * stride, r = rowOf[y] * sw;
+        for (let x = 0; x < W0; x += 2) acc[r + colOf[x]] += buf[o + x];
+      }
+      const g = new Uint8Array(outW * outH);
+      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
+        // video luma is "limited range" (16–235): stretch to 0–255 like the canvas path
+        let v = (acc[y * sw + x] / cnt[y * sw + x] - 16) * 1.1644;
+        v = v < 0 ? 0 : v > 255 ? 255 : v;
+        let X = x, Y = y;
+        if (rot === 90) { X = sh - 1 - y; Y = x; } else if (rot === 180) { X = sw - 1 - x; Y = sh - 1 - y; } else if (rot === 270) { X = y; Y = sw - 1 - x; }
+        g[Y * outW + X] = v;
+      }
+      return g;
     }
-    flushFrames(false);
-    const done = decodedCount / totalSamples, el = (performance.now() - started) / 1000;
-    setProgress(done, `Analysing… ${Math.round(done * 100)}%` + (done > 0.03 ? ` · about ${fmtTime(el / done - el)} left` : ""));
-    if (pending.length < 30 && !eof) { await feed(); continue; }
-    if (!pending.length && eof) break;
-    await new Promise(r => setTimeout(r, 0));
+
+    return {
+      w: outW, h: outH,
+      // any drawable source (video element, canvas) – main thread
+      element: canvasShrink,
+      // a VideoFrame – luma plane when possible, canvas otherwise
+      async frame(frame, mode) {
+        if (mode !== "canvas" && !lumaBroken && LUMA_FORMATS.has(frame.format)) {
+          try { return await lumaShrink(frame); } catch (e) { lumaBroken = true; }
+        }
+        return canvasShrink(frame);
+      }
+    };
   }
-  await decoder.flush(); decoder.close();
-  flushFrames(true);
-  if (decodedCount < 10) throw new Error("decoded too few frames");
-  return { fps: fps / decimate };
-}
 
-// Path 2: play the video and grab each displayed frame (works everywhere, real-time speed).
-async function framesPlayback(file, onFrame) {
-  const v = document.createElement("video");
-  v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = URL.createObjectURL(file);
-  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error("This browser can't open that video.")); });
-  const grabber = makeGrabber(v.videoWidth, v.videoHeight, 0);
-  const dur = v.duration, times = [];
-  const useRvfc = "requestVideoFrameCallback" in v;
-  await new Promise((res, rej) => {
-    let lastT = -1;
-    const step = (now, meta) => {
-      const t = meta ? meta.mediaTime : v.currentTime;
-      if (t > lastT + 1e-4) { lastT = t; times.push(t); onFrame(grabber.grab(v), t, grabber); }
-      setProgress(t / dur, `Analysing at playback speed… ${Math.round(t / dur * 100)}% · keep this screen on`);
-      if (v.ended) return res();
-      useRvfc ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step());
-    };
-    v.onended = () => res();
-    v.play().then(() => useRvfc ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step()), rej);
-  });
-  URL.revokeObjectURL(v.src);
-  const fps = times.length > 1 ? (times.length - 1) / (times[times.length - 1] - times[0]) : 30;
-  return { fps };
-}
+  root.SkipShrink = { makeShrinker, geometry };
+})(typeof self !== "undefined" ? self : this);
 
-// ---------------------------------------------------------------- analyse
-let videoUrl = null;
-async function analyse(file) {
-  $("error").hidden = true;
-  setProgress(0, "Opening video…");
-  $("file").disabled = true;
-  let lock = null; try { lock = await navigator.wakeLock?.request("screen"); } catch {}
+</script>
+<script id="skipengine">
+// Skip Count engine (browser main thread): turns a video file — or a live
+// camera — into a counted result. Heavy work runs on a pool of workers:
+//   decoder (hardware) → worker: shrink frame to 160 px grayscale
+//                      → worker: compare with the previous frame (motion)
+//                      → main: motion results in frame order → SkipCore.Tracker
+(function (root) {
+  "use strict";
+  const W = 160; // analysis width in pixels (tested: 160 gives the best count)
+  const params = new URLSearchParams(root.location ? root.location.search : "");
+  const SHRINK_MODE = params.get("grab") || "luma"; // "canvas" forces the old path (benchmarking)
+
+  // ------------------------------------------------------------ worker pool
+  async function scriptSource(id, file) {
+    const el = document.getElementById(id);
+    if (el && el.textContent.trim()) return el.textContent;
+    return (await fetch(file)).text();
+  }
+  const WORKER_GLUE = `
+let shrinker = null;
+self.onmessage = async (e) => {
+  const d = e.data;
   try {
-    const run = async (path) => {
-      let tracker = null;
-      const onFrame = (g, t, grabber) => { if (!tracker) tracker = new SkipCore.Tracker(grabber.w, grabber.h); tracker.push(g, t); };
-      const meta = await path(file, onFrame);
-      return { tracker, fps: meta.fps };
-    };
-    let out, via = "webcodecs";
-    try { out = await run(framesWebCodecs); }
-    catch (e) { console.warn("Fast path unavailable, using playback:", e); via = "playback"; out = await run(framesPlayback); }
-    if (!out.tracker) throw new Error("No frames could be read from this video.");
-    setProgress(1, "Counting…");
-    const s = out.tracker.signal(), fps = s.fps;
-    const r = SkipCore.countSkips(s.t, s.y, fps, { horizontal: s.x, valid: s.valid });
+    if (d.type === "init") { shrinker = SkipShrink.makeShrinker(d.srcW, d.srcH, d.rot, d.W); return; }
+    if (d.type === "shrink") {
+      let g;
+      try { g = await shrinker.frame(d.frame, d.mode); } finally { d.frame.close(); }
+      self.postMessage({ type: "gray", i: d.i, g }, [g.buffer]);
+      return;
+    }
+    if (d.type === "motion") {
+      const m = SkipCore.frameMotion(new Uint8Array(d.prev), new Uint8Array(d.cur), d.w, d.h);
+      self.postMessage({ type: "motion", i: d.i, vy: m.vy, vx: m.vx, frac: m.frac, span: m.span });
+    }
+  } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err) }); }
+};`;
+
+  class Pool {
+    static async create() {
+      const n = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1));
+      let workers = [];
+      try {
+        const src = [await scriptSource("skipcore", "core.js"), await scriptSource("skipshrink", "shrink.js"), WORKER_GLUE].join("\n");
+        const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+        workers = Array.from({ length: n }, () => new Worker(url));
+        URL.revokeObjectURL(url);
+      } catch (e) { console.warn("Workers unavailable, using one core:", e); workers = []; }
+      return new Pool(workers);
+    }
+    constructor(workers) {
+      this.workers = workers; this.tracker = null; this.shrinker = null; this.geom = null;
+      this.next = 0;                 // next frame index to hand out
+      this.ts = new Map();           // frame index → time
+      this.grays = new Map();        // shrunk frames waiting for their turn
+      this.motionNext = 0;           // next frame index to send for motion
+      this.prevGray = null;
+      this.done = new Map();         // motion results waiting to go to the tracker in order
+      this.trackNext = 0;
+      this.inFlight = 0; this.wake = null; this.failed = null; this.rr = 0;
+      for (const wk of workers) wk.onmessage = (e) => this.onMessage(e.data);
+    }
+    get size() { return Math.max(1, this.workers.length); }
+    setGeometry(srcW, srcH, rot) {
+      this.shrinker = SkipShrink.makeShrinker(srcW, srcH, rot, W);
+      this.geom = { w: this.shrinker.w, h: this.shrinker.h };
+      this.tracker = new SkipCore.Tracker(this.geom.w, this.geom.h);
+      for (const wk of this.workers) wk.postMessage({ type: "init", srcW, srcH, rot, W });
+    }
+    pickWorker() { return this.workers[this.rr++ % this.workers.length]; }
+    poke() { if (this.wake) { const w = this.wake; this.wake = null; w(); } }
+    onMessage(d) {
+      if (d.type === "error") { this.failed = new Error(d.message); this.poke(); return; }
+      this.inFlight--;
+      if (d.type === "gray") this.grays.set(d.i, d.g);
+      else this.done.set(d.i, d);
+      this.pump();
+    }
+    // a decoded VideoFrame (ownership passes to the pool)
+    async pushFrame(frame, t) {
+      const i = this.next++; this.ts.set(i, t);
+      if (!this.workers.length) { const g = await this.shrinker.frame(frame, SHRINK_MODE); frame.close(); this.grays.set(i, g); this.pump(); return; }
+      this.inFlight++;
+      this.pickWorker().postMessage({ type: "shrink", i, frame, mode: SHRINK_MODE }, [frame]);
+    }
+    // an already-shrunk frame (playback / camera fallback)
+    pushGray(g, t) { const i = this.next++; this.ts.set(i, t); this.grays.set(i, g); this.pump(); }
+    pump() {
+      // send consecutive pairs for motion as soon as both frames are shrunk
+      while (this.grays.has(this.motionNext)) {
+        const i = this.motionNext++, g = this.grays.get(i); this.grays.delete(i);
+        if (!this.prevGray) this.done.set(i, { vy: 0, vx: 0, frac: 0 });
+        else if (!this.workers.length) this.done.set(i, SkipCore.frameMotion(this.prevGray, g, this.geom.w, this.geom.h));
+        else {
+          const cur = g.slice(); this.inFlight++;
+          this.pickWorker().postMessage({ type: "motion", i, prev: this.prevGray.buffer, cur: cur.buffer, w: this.geom.w, h: this.geom.h }, [this.prevGray.buffer, cur.buffer]);
+        }
+        this.prevGray = g;
+      }
+      while (this.done.has(this.trackNext)) {
+        const i = this.trackNext++; this.tracker.pushMotion(this.done.get(i), this.ts.get(i));
+        this.done.delete(i); this.ts.delete(i);
+      }
+      this.poke();
+    }
+    get processed() { return this.trackNext; }
+    async below(k) { while (this.inFlight > k) { if (this.failed) throw this.failed; await new Promise(r => this.wake = r); } if (this.failed) throw this.failed; }
+    async finish() { await this.below(0); this.pump(); this.workers.forEach(w => w.terminate()); return this.tracker; }
+    stop() { this.workers.forEach(w => w.terminate()); }
+  }
+
+  // ------------------------------------------------------------ fast path: WebCodecs + mp4box
+  async function decodeWebCodecs(file, pool, onProgress) {
+    if (!("VideoDecoder" in root) || typeof MP4Box === "undefined") throw new Error("no webcodecs");
+    const mp4 = MP4Box.createFile();
+    let track = null, info = null;
+    const ready = new Promise((res, rej) => {
+      mp4.onError = e => rej(new Error(String(e)));
+      mp4.onReady = i => { info = i; track = i.videoTracks[0]; track ? res() : rej(new Error("No video track in this file.")); };
+    });
+    const CHUNK = 4 << 20; let offset = 0, eof = false, followHint = true;
+    async function feed() {
+      if (eof) return;
+      const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
+      buf.fileStart = offset;
+      const next = mp4.appendBuffer(buf);
+      // phase 1 follows mp4box's hint to jump over the video data to the index
+      // (phones often store it at the end); phase 2 reads the file in order
+      offset = (followHint && typeof next === "number" && next > offset) ? next : offset + buf.byteLength;
+      if (offset >= file.size) { eof = true; mp4.flush(); }
+    }
+    let readyDone = false; ready.then(() => readyDone = true, () => readyDone = true);
+    while (!readyDone && !eof) await feed();
+    await ready;
+
+    const entry = mp4.getTrackById(track.id).mdia.minf.stbl.stsd.entries[0];
+    let description;
+    const box = entry.avcC || entry.hvcC;
+    if (box) { const ds = new DataStream(undefined, 0, DataStream.BIG_ENDIAN); box.write(ds); description = new Uint8Array(ds.buffer, 8); }
+    const config = { codec: track.codec.startsWith("vp08") ? "vp8" : track.codec, codedWidth: track.video.width, codedHeight: track.video.height, optimizeForLatency: true };
+    if (description) config.description = description;
+    if (!(await VideoDecoder.isConfigSupported(config)).supported) throw new Error("decoder unsupported: " + track.codec);
+    const m = track.matrix || [65536, 0, 0, 0, 65536, 0, 0, 0, 0x40000000];
+    pool.setGeometry(track.video.width, track.video.height, Math.round(Math.atan2(m[1], m[0]) * 180 / Math.PI));
+    const duration = track.movie_duration / track.movie_timescale || track.duration / track.timescale;
+    const fps = track.nb_samples / duration, decimate = Math.max(1, Math.round(fps / 30));
+    const total = track.nb_samples;
+
+    let decoded = 0, failed = null, lastT = -Infinity, reordered = 0;
+    const decoder = new VideoDecoder({
+      output: frame => {
+        const k = decoded++;
+        if (k % decimate) { frame.close(); return; }
+        const t = frame.timestamp / 1e6;
+        if (t < lastT) reordered++; lastT = Math.max(lastT, t);
+        pool.pushFrame(frame, t);
+      },
+      error: e => { failed = e; }
+    });
+    decoder.configure(config);
+    const pending = []; let nextNumber = 0; // mp4box may hand some samples over twice; keep each once
+    mp4.onSamples = (id, user, samples) => { for (const s of samples) { if (s.number < nextNumber) continue; nextNumber = s.number + 1; pending.push(s); } };
+    mp4.setExtractionOptions(track.id, null, { nbSamples: 60 });
+    mp4.start();
+    followHint = false; eof = false; offset = mp4.seek(0, true).offset;
+
+    const started = performance.now();
+    while (true) {
+      if (failed) throw failed;
+      while (pending.length && decoder.decodeQueueSize < 16) {
+        const s = pending.shift();
+        decoder.decode(new EncodedVideoChunk({ type: s.is_sync ? "key" : "delta", timestamp: 1e6 * s.cts / s.timescale, duration: 1e6 * s.duration / s.timescale, data: s.data }));
+        mp4.releaseUsedSamples(track.id, s.number + 1); // the chunk copied the bytes; free them
+      }
+      await pool.below(pool.size * 3); // keep workers busy, but don't let decoding run away
+      const done = Math.min(1, decoded / total), el = (performance.now() - started) / 1000;
+      onProgress(done, done > 0.03 ? el / done - el : null);
+      if (pending.length < 40 && !eof) { await feed(); continue; }
+      if (!pending.length && eof) break;
+      await new Promise(r => setTimeout(r, 0));
+    }
+    await decoder.flush(); decoder.close();
+    if (decoded < 10) throw new Error("decoded too few frames");
+    return { fps: fps / decimate, duration, reordered, created: info.created && info.created.getTime() > 86400000 * 365 * 5 ? info.created : null };
+  }
+
+  // ------------------------------------------------------------ fallback: play the video
+  async function decodePlayback(file, pool, onProgress) {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = URL.createObjectURL(file);
+    await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error("This browser can't open that video.")); });
+    pool.setGeometry(v.videoWidth, v.videoHeight, 0);
+    const shr = pool.shrinker, dur = v.duration, rvfc = "requestVideoFrameCallback" in v;
+    await new Promise((res, rej) => {
+      let lastT = -1;
+      const step = (now, meta) => {
+        const t = meta ? meta.mediaTime : v.currentTime;
+        if (t > lastT + 1e-4) { lastT = t; pool.pushGray(shr.element(v), t); }
+        onProgress(Math.min(1, t / dur), dur - t);
+        if (v.ended) return res();
+        rvfc ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step());
+      };
+      v.onended = () => res();
+      v.play().then(() => rvfc ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step()), rej);
+    });
+    URL.revokeObjectURL(v.src);
+    return { fps: 30, duration: dur, created: null };
+  }
+
+  // ------------------------------------------------------------ count
+  function countFrom(tracker) {
+    const s = tracker.signal();
+    const r = SkipCore.countSkips(s.t, s.y, s.fps, { horizontal: s.x, valid: s.valid });
     r.skipTimes = r.skipTimes.map(x => x + s.offset); // back to video time
     for (const st of r.sets) { st.start += s.offset; st.end += s.offset; }
-    r.fps = fps;
-    window.__skipDebug = { via, frames: out.tracker.ts.length, fps, bodySize: s.bodySize, skipTimes: r.skipTimes };
-    renderResult(r, false);
-    window.SkipJournal?.offer({ source: "video", skips: r.skips, sets: r.sets.map(x => x.skips), jumpS: r.jumpingSeconds, restS: r.restSeconds, when: file.lastModified || Date.now() });
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-    videoUrl = URL.createObjectURL(file);
-    $("player").src = videoUrl; $("playerCard").hidden = false;
-    setProgress(1, `Done: ${fmtInt(r.skips)} skips in ${r.sets.length} set${r.sets.length === 1 ? "" : "s"}.` +
-      (via === "playback" ? " This browser couldn't use the fast decoder, so the video was analysed while playing; the count can be off by a few. Chrome or Safari 16.4+ gives the exact count." : "") +
-      (s.bodySize < 0.5 ? " You look small in this video, which can add about one skip per set (the swing that starts it). For an exact count, put the phone closer so you fill at least half the frame's height." : ""));
-    $("results").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  } catch (e) {
-    console.error(e);
-    $("error").textContent = `Couldn't analyse this video: ${e.message || e}. Try a shorter clip, or a video recorded with your phone's normal camera app.`;
-    $("error").hidden = false; $("progressBox").hidden = true;
-  } finally {
-    $("file").disabled = false; $("file").value = "";
-    try { await lock?.release(); } catch {}
+    r.fps = s.fps; r.bodySize = s.bodySize; r.offset = s.offset;
+    return r;
   }
-}
 
-// live counter on the playback check
-(function overlayLoop() {
-  const v = $("player"), o = $("overlay");
-  const tick = () => {
-    if (last && !$("playerCard").hidden) {
-      const t = v.currentTime, ts = last.skipTimes;
-      let lo = 0, hi = ts.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (ts[mid] <= t) lo = mid + 1; else hi = mid; }
-      o.textContent = lo; o.classList.toggle("flash", lo > 0 && t - ts[lo - 1] < 0.12);
+  async function analyse(file, { onProgress = () => {} } = {}) {
+    const t0 = performance.now();
+    let via = "webcodecs", meta, pool = await Pool.create();
+    try { meta = await decodeWebCodecs(file, pool, onProgress); }
+    catch (e) {
+      console.warn("Fast path unavailable, using playback:", e);
+      pool.stop(); pool = await Pool.create(); via = "playback";
+      meta = await decodePlayback(file, pool, onProgress);
     }
-    "requestVideoFrameCallback" in v && !v.paused ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
-  };
-  tick();
-})();
-
-// ---------------------------------------------------------------- wiring
-loadProfile();
-
-// Changing your details recalculates straight away, with a visible confirmation.
-let updatedTimer = 0, lastKcal = null;
-function profileChanged() {
-  saveProfile();
-  if (!calSource) return;
-  const before = $("kTotal").textContent;
-  renderCalories(calSource.skips, calSource.jumpS, calSource.restS);
-  const p = profile(), wUnit = $("weightUnit").value;
-  const w = wUnit === "lb" ? `${Math.round(p.kg / 0.45359237)} lb` : `${Math.round(p.kg * 10) / 10} kg`;
-  const h = $("heightUnit").value === "cm" ? `${Math.round(p.cm)} cm` : `${$("heightFt").value}′${$("heightIn").value}″`;
-  $("updated").textContent = `✓ Updated for ${w} · ${h} · ${p.age} · ${p.sex}`;
-  $("updated").classList.add("show");
-  if ($("kTotal").textContent !== before) { const n = $("kTotal"); n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); }
-  clearTimeout(updatedTimer);
-  updatedTimer = setTimeout(() => $("updated").classList.remove("show"), 3500);
-}
-for (const id of ["weight", "heightCm", "heightFt", "heightIn", "age"]) $(id).addEventListener("input", profileChanged);
-document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener("change", profileChanged));
-$("weightUnit").addEventListener("change", e => { // convert, so switching units doesn't change your weight
-  const v = parseFloat($("weight").value);
-  if (v > 0) $("weight").value = e.target.value === "lb" ? Math.round(v / 0.45359237) : Math.round(v * 0.45359237 * 10) / 10;
-  profileChanged();
-});
-let heightUnitNow = $("heightUnit").value;
-for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change", e => {
-  // read the height in the unit it was entered in, then convert
-  const cm = heightUnitNow === "cm" ? parseFloat($("heightCm").value) || 175
-    : (parseFloat($("heightFt").value) || 0) * 30.48 + (parseFloat($("heightIn").value) || 0) * 2.54;
-  heightUnitNow = e.target.value; showHeightUnit(e.target.value);
-  if (e.target.value === "cm") $("heightCm").value = Math.round(cm);
-  else { const inches = cm / 2.54; let ft = Math.floor(inches / 12), inch = Math.round(inches - ft * 12); if (inch === 12) { ft++; inch = 0; } $("heightFt").value = ft; $("heightIn").value = inch; }
-  profileChanged();
-});
-$("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyse(f); });
-$("mGo").addEventListener("click", () => {
-  const skips = parseInt($("mSkips").value, 10), min = parseFloat($("mMin").value), rest = parseFloat($("mRest").value) || 0;
-  if (!(skips > 0) || !(min > 0)) { $("mSkips").reportValidity(); return; }
-  renderCalories(skips, min * 60, rest * 60);
-  window.SkipJournal?.offer({ source: "manual", skips, sets: [], jumpS: min * 60, restS: rest * 60, when: Date.now() });
-  $("updated").textContent = `✓ For ${fmtInt(skips)} skips in ${min} min`; $("updated").classList.add("show");
-  $("calCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-});
-
-// Example: the verified 39 s test clip (51 skips by hand count), so the page opens with real numbers.
-(function example() {
-  const sets = [[0.85, 8.18, 19], [16.1, 19.55, 9], [21.7, 25.6, 10], [28.1, 30.0, 5], [31.5, 34.6, 8]];
-  const gt = [1.03,1.5,1.9,2.26,2.63,3.0,3.4,3.8,4.16,4.6,5.0,5.33,5.66,6.06,6.43,6.83,7.16,7.56,7.93,16.29,16.69,17.09,17.45,17.85,18.22,18.58,18.95,19.35,21.88,22.35,22.75,23.11,23.48,23.88,24.28,24.65,25.05,25.41,28.24,28.68,29.07,29.44,29.84,31.64,32.04,32.41,32.81,33.2,33.6,34.0,34.4];
-  const fps = 30, n = 39 * fps, x = new Float64Array(n);
-  for (const [s, e] of sets) for (let i = Math.floor(s * fps); i < e * fps; i++) {
-    let d = Infinity; for (const g of gt) d = Math.min(d, Math.abs(g - i / fps));
-    x[i] = Math.cos(Math.min(d, 0.19) / 0.385 * 2 * Math.PI) * 0.18;
+    const tracker = await pool.finish();
+    if (!tracker || tracker.ts.length < 10) throw new Error("No frames could be read from this video.");
+    const result = countFrom(tracker);
+    return { result, via, frames: tracker.ts.length, seconds: (performance.now() - t0) / 1000, recordedAt: meta.created || new Date(file.lastModified || Date.now()), reordered: meta.reordered || 0 };
   }
-  const jump = sets.reduce((a, s) => a + s[1] - s[0], 0);
-  renderResult({ skips: 51, skipTimes: gt, sets: sets.map(([start, end, skips]) => ({ start, end, skips })), jumpingSeconds: jump,
-    totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps }, true);
-})();
+
+  root.SkipEngine = { analyse, Pool, countFrom, W };
+})(typeof self !== "undefined" ? self : this);
+
 </script>
-<script>
+<script id="skipjournal">
 // Skip Count journal: saved sessions, insights, and Google sign-in + Firestore sync.
 //
 // The device copy (localStorage) is what the page reads. When you're signed in it is merged
@@ -1106,85 +1238,43 @@ $("mGo").addEventListener("click", () => {
   const time = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
     return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
 
-  // ------------------------------------------------------------------ save offer
-  let pending = null; // what the Save card would save
-  function offer(p) {
-    pending = { ...p, saved: false };
-    el("saveDate").value = dayKey(p.when || Date.now());
-    el("saveDate").max = dayKey(Date.now());
-    el("saveNote").value = "";
-    el("saveSummary").textContent = `${int(p.skips)} skips` + (p.sets?.length ? ` in ${p.sets.length} set${p.sets.length === 1 ? "" : "s"}` : "") + `, ${time(p.jumpS)} jumping`;
-    el("saveBtn").disabled = false; el("saveBtn").textContent = "Save to history";
-    el("saveCard").hidden = false;
+  // ------------------------------------------------------------------ sessions API (used by app.js)
+  // A session: { id, date: "YYYY-MM-DD", at (ms, when it happened), source, skips, sets, best,
+  //              jumpS, restS, kcal, note, createdAt, updatedAt }
+  const listeners = new Set();
+  function render() { for (const f of listeners) { try { f(state.sessions); } catch (e) { console.error(e); } } }
+  function add(p) {
+    const now = Date.now(), at = p.at || now, sets = (p.sets || []).slice(0, 500);
+    const s = { id: uid(), date: dayKey(at), at, source: p.source || "video", skips: Math.round(p.skips), sets,
+      best: sets.length ? Math.max(...sets) : 0, jumpS: Math.round(p.jumpS || 0), restS: Math.round(p.restS || 0),
+      kcal: Math.round((p.kcal || 0) * 10) / 10, note: (p.note || "").slice(0, 140), createdAt: now, updatedAt: now };
+    state.sessions = sortSessions([s, ...state.sessions]); write(); render(); cloud.schedule();
+    return s;
   }
-  function savePending() {
-    if (!pending || pending.saved) return;
-    const date = el("saveDate").value || dayKey(Date.now());
-    const prof = root.profile ? root.profile() : { kg: 70, cm: 175, age: 30, sex: "male" };
-    const c = root.SkipCore.calories(pending.skips, pending.jumpS, pending.restS, prof.kg, prof.cm, prof.age, prof.sex);
-    const now = Date.now(), sets = (pending.sets || []).slice(0, 500);
-    const s = {
-      id: uid(), date, source: pending.source, skips: Math.round(pending.skips), sets,
-      best: sets.length ? Math.max(...sets) : 0, jumpS: Math.round(pending.jumpS), restS: Math.round(pending.restS || 0),
-      kcal: Math.round(c.total), note: el("saveNote").value.trim().slice(0, 140), createdAt: now, updatedAt: now,
-    };
-    state.sessions = sortSessions([s, ...state.sessions]); write();
-    pending.saved = true;
-    el("saveBtn").disabled = true; el("saveBtn").textContent = "Saved ✓";
-    render(); cloud.schedule();
+  function update(id, patch) {
+    const s = state.sessions.find(x => x.id === id); if (!s) return null;
+    Object.assign(s, patch, { updatedAt: Date.now() });
+    if (patch.at) s.date = dayKey(patch.at);
+    state.sessions = sortSessions(state.sessions); write(); render(); cloud.schedule();
+    return s;
   }
-  function removeSession(id) {
-    const s = state.sessions.find(x => x.id === id); if (!s) return;
-    if (!confirm(`Delete ${int(s.skips)} skips on ${nice(s.date)}?`)) return;
+  function remove(id) {
+    const s = state.sessions.find(x => x.id === id); if (!s) return null;
     state.sessions = state.sessions.filter(x => x.id !== id);
     state.deleted = [...state.deleted.filter(t => t.id !== id), { id, at: Date.now() }];
     write(); render(); cloud.schedule();
+    return s;
   }
-
-  // ------------------------------------------------------------------ history card
-  let showAll = false;
-  function render() {
-    const box = el("history"); if (!box) return;
-    const list = state.sessions, has = list.length > 0;
-    el("histEmpty").hidden = has; el("histBody").hidden = !has;
-    if (!has) return;
-    const ins = insights(list);
-    el("hToday").textContent = int(ins.today);
-    el("hWeek").textContent = int(ins.week);
-    el("hMonth").textContent = int(ins.month);
-    el("hAll").textContent = int(ins.all);
-    el("hStreak").textContent = ins.streak;
-    el("hStreakSub").textContent = `day streak · best ${ins.longest}`;
-    el("hBestSet").textContent = int(ins.bestSet);
-    el("hPace").textContent = ins.paceRecent ? Math.round(ins.paceRecent) : "–";
-
-    const lines = [];
-    if (ins.lastWeekToDate || ins.week) {
-      const diff = ins.week - ins.lastWeekToDate;
-      lines.push(ins.lastWeekToDate ? `This week: ${int(ins.week)} skips, ${diff >= 0 ? "up" : "down"} ${int(Math.abs(diff))} on the same point last week.` : `This week: ${int(ins.week)} skips so far.`);
-    }
-    if (ins.jumpWeekS) lines.push(`${time(ins.jumpWeekS)} of actual jumping and about ${int(ins.kcalWeek)} kcal this week.`);
-    if (ins.paceRecent && ins.paceEarlier) {
-      const d = Math.round(ins.paceRecent - ins.paceEarlier);
-      lines.push(d === 0 ? `Pace is steady at ${Math.round(ins.paceRecent)} skips/min.` : `Pace over your last 5 sessions is ${Math.abs(d)} skips/min ${d > 0 ? "faster" : "slower"} than the 5 before.`);
-    }
-    if (ins.bestDay) lines.push(`Biggest day: ${int(ins.bestDay.skips)} skips on ${nice(ins.bestDay.date)}.`);
-    lines.push(`${ins.sessions} session${ins.sessions === 1 ? "" : "s"} over ${ins.activeDays} day${ins.activeDays === 1 ? "" : "s"}.`);
-    el("hLines").innerHTML = lines.map(l => `<li>${esc(l)}</li>`).join("");
-
-    const max = Math.max(1, ...ins.last14.map(d => d.skips));
-    el("hBars").innerHTML = ins.last14.map(d => {
-      const h = d.skips ? Math.max(4, Math.round(100 * d.skips / max)) : 0;
-      const lbl = parseDay(d.date).toLocaleDateString(undefined, { weekday: "narrow" });
-      return `<div class="bar" title="${esc(nice(d.date))}: ${int(d.skips)} skips"><i style="height:${h}%"></i><span>${esc(lbl)}</span></div>`;
-    }).join("");
-
-    const shown = showAll ? list : list.slice(0, 8);
-    el("hList").innerHTML = shown.map(s => `<li><div><b>${int(s.skips)}</b> skips <span class="hint">· ${esc(nice(s.date))}</span>` +
-      `<div class="note">${s.sets?.length ? `${s.sets.length} sets · best ${int(s.best)} · ` : ""}${time(s.jumpS)} jumping · ${s.jumpS ? Math.round(60 * s.skips / s.jumpS) : "–"}/min · ${int(s.kcal)} kcal${s.source === "manual" ? " · typed in" : ""}${s.note ? ` · ${esc(s.note)}` : ""}</div></div>` +
-      `<button type="button" class="del" data-del="${esc(s.id)}" aria-label="Delete this session">×</button></li>`).join("");
-    el("hMore").hidden = list.length <= 8;
-    el("hMore").textContent = showAll ? "Show fewer" : `Show all ${list.length}`;
+  function restore(s) { // undo a delete: newer than its tombstone, so it wins everywhere
+    state.deleted = state.deleted.filter(t => t.id !== s.id);
+    state.sessions = sortSessions([{ ...s, updatedAt: Date.now() }, ...state.sessions.filter(x => x.id !== s.id)]);
+    write(); render(); cloud.schedule();
+  }
+  function importMany(list) {
+    const before = state.sessions.length;
+    state = merge({ sessions: list.filter(x => x && x.id && typeof x.skips === "number" && (x.date || x.at)).map(x => ({ date: dayKey(x.at), ...x, updatedAt: x.updatedAt || Date.now() })), deleted: [] }, state);
+    write(); render(); cloud.schedule();
+    return state.sessions.length - before;
   }
 
   // ------------------------------------------------------------------ cloud
@@ -1262,7 +1352,7 @@ $("mGo").addEventListener("click", () => {
       try { await auth.signInWithPopup(p); }
       catch (e) {
         if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment", "auth/cancelled-popup-request"].includes(e.code)) await auth.signInWithRedirect(p);
-        else if (e.code !== "auth/popup-closed-by-user") { set("signed-out"); alert(`Sign-in failed: ${e.message}`); }
+        else if (e.code !== "auth/popup-closed-by-user") set("error", `sign-in failed: ${e.message}`);
       }
     }
     async function signOut() { if (!auth) return; await run(false); await auth.signOut(); }
@@ -1271,7 +1361,7 @@ $("mGo").addEventListener("click", () => {
       if (!root.firebase) { set("unconfigured"); return; }
       try { firebase.initializeApp(cfg, "skipcount"); const app = firebase.app("skipcount"); auth = app.auth(); db = app.firestore(); }
       catch (e) { set("error", e.message); return; }
-      auth.getRedirectResult().catch(e => alert(`Sign-in failed: ${e.message}`));
+      auth.getRedirectResult().catch(e => set("error", `sign-in failed: ${e.message}`));
       auth.onAuthStateChanged(u => {
         user = u ? { uid: u.uid, email: u.email || "" } : null; pushed.clear(); pushedMeta = ""; lastPull = 0;
         if (u) run(true); else set("signed-out");
@@ -1286,19 +1376,583 @@ $("mGo").addEventListener("click", () => {
   function touchProfile() { try { localStorage.setItem(PKEY, String(Date.now())); } catch {} cloud.schedule(); }
 
   // ------------------------------------------------------------------ wire up
-  el("saveBtn").addEventListener("click", savePending);
-  el("hList").addEventListener("click", e => { const id = e.target.closest("[data-del]")?.dataset.del; if (id) removeSession(id); });
-  el("hMore").addEventListener("click", () => { showAll = !showAll; render(); });
-  el("cloudIn").addEventListener("click", () => cloud.signIn());
-  el("cloudOut").addEventListener("click", () => cloud.signOut());
-  el("cloudSync").addEventListener("click", () => cloud.syncNow());
+  const on = (id, f) => el(id)?.addEventListener("click", f);
+  on("cloudIn", () => cloud.signIn());
+  on("cloudOut", () => cloud.signOut());
+  on("cloudSync", () => cloud.syncNow());
   addEventListener("storage", e => { if (e.key === KEY) { state = read(); render(); } });
-  render(); cloud.init(); cloud.paint();
-  root.SkipJournal = { offer, touchProfile, render };
+  cloud.init(); cloud.paint();
+  root.SkipJournal = { list: () => state.sessions, add, update, remove, restore, importMany, onChange: f => listeners.add(f), touchProfile, syncNow: () => cloud.syncNow() };
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
+<script id="skipapp">
+// Skip Count — the app: Count tab (video / live camera → result + calories)
+// and Insights tab (sessions saved on this device → totals, charts, heatmap).
+"use strict";
+const $ = id => document.getElementById(id);
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const haptic = (ms = 8) => { try { navigator.vibrate?.(ms); } catch {} };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } }
+};
 
+// ================================================================ formatting
+const fmtTime = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), r = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
+const fmtInt = n => Math.round(n).toLocaleString();
+const fmtKcal = n => n < 20 ? (Math.round(n * 10) / 10).toLocaleString() : fmtInt(n); // short clips: a decimal
+const fmtMin = s => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round(s % 3600 / 60)}m` : s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`;
+const fmtCompact = n => n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : fmtInt(n);
+const pad2 = n => String(n).padStart(2, "0");
+const dayKey = d => { d = new Date(d); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+const startOfDay = d => { d = new Date(d); d.setHours(0, 0, 0, 0); return d; };
+const addDays = (d, n) => { d = new Date(d); d.setDate(d.getDate() + n); return d; };
+const mondayOf = d => { d = startOfDay(d); return addDays(d, -((d.getDay() + 6) % 7)); };
+const DOW = ["M", "T", "W", "T", "F", "S", "S"];
+const escapeHtml = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDate = (d, opts) => new Date(d).toLocaleDateString(undefined, opts);
+
+// ================================================================ profile & calories
+const profileIds = ["weight", "weightUnit", "heightCm", "heightUnit", "heightFt", "heightIn", "age"];
+function showHeightUnit(u) { $("heightUnit").value = u; $("heightUnit2").value = u; $("heightCmWrap").hidden = u !== "cm"; $("heightFtWrap").hidden = u === "cm"; }
+function loadProfile() {
+  const p = store.get("skipcount.profile", null); if (!p) return;
+  for (const id of profileIds) if (p[id] != null) $(id).value = p[id];
+  if (p.sex) $(p.sex === "female" ? "sexF" : "sexM").checked = true;
+  showHeightUnit(p.heightUnit || "cm");
+}
+function saveProfile() { const p = {}; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+function profile() {
+  let kg = parseFloat($("weight").value) || 70;
+  if ($("weightUnit").value === "lb") kg *= 0.45359237;
+  const cm = $("heightUnit").value === "cm" ? (parseFloat($("heightCm").value) || 175)
+    : (parseFloat($("heightFt").value) || 0) * 30.48 + (parseFloat($("heightIn").value) || 0) * 2.54;
+  return { kg, cm: cm || 175, age: parseFloat($("age").value) || 30, sex: document.querySelector('input[name="sex"]:checked').value };
+}
+const kcalFor = (skips, jumpS, restS) => { const p = profile(); return SkipCore.calories(skips, jumpS, restS, p.kg, p.cm, p.age, p.sex); };
+
+let calSource = null; // { skips, jumpS, restS }
+function renderCalories(skips, jumpS, restS) {
+  calSource = { skips, jumpS, restS };
+  const c = kcalFor(skips, jumpS, restS);
+  $("kTotal").textContent = fmtKcal(c.total);
+  $("kRange").textContent = `Likely range ${fmtKcal(c.low)}–${fmtKcal(c.high)} kcal`;
+  $("kJump").textContent = `${fmtKcal(c.jumping)} kcal`;
+  $("kRest").textContent = `${fmtKcal(c.rest)} kcal`;
+  $("kNet").textContent = `${fmtKcal(c.net)} kcal`;
+  $("kMet").textContent = `${c.met.toFixed(1)} MET`;
+  $("kRmr").textContent = `${fmtInt(c.rmr)} kcal/day`;
+  return c;
+}
+
+// ================================================================ sessions (saved on this device)
+// Storage and Google/Firestore sync live in journal.js; this keeps a time-sorted copy.
+const timeOf = x => x.at || (() => { const [y, m, d] = x.date.split("-").map(Number), c = new Date(x.createdAt || 0); return +new Date(y, m - 1, d, c.getHours(), c.getMinutes()); })();
+let sessions = [];
+function syncFromJournal() { sessions = SkipJournal.list().map(x => ({ ...x, at: timeOf(x) })).sort((a, b) => a.at - b.at); }
+SkipJournal.onChange(() => { syncFromJournal(); refreshAll(); });
+syncFromJournal();
+function addSession(s) { return SkipJournal.add(s); }
+function removeSession(id) { return SkipJournal.remove(id); }
+function updateSession(id, patch) { return SkipJournal.update(id, patch); }
+function sessionFromResult(r, at, source) {
+  const c = kcalFor(r.skips, r.jumpingSeconds, r.restSeconds);
+  return { at: +at, source, skips: r.skips, jumpS: r.jumpingSeconds, restS: r.restSeconds, sets: r.sets.map(s => s.skips), kcal: c.total };
+}
+
+// ================================================================ toast
+let toastTimer = 0, toastUndo = null;
+function toast(text, undo) {
+  $("toastText").textContent = text; toastUndo = undo || null; $("toastAction").hidden = !undo;
+  $("toast").classList.add("show"); clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), undo ? 6000 : 3500);
+}
+$("toastAction").onclick = () => { const u = toastUndo; toastUndo = null; $("toast").classList.remove("show"); u && u(); };
+
+// ================================================================ results view
+let last = null, currentId = null;
+function animateNumber(el, to, fmt = fmtInt) {
+  if (reduceMotion() || to < 5) { el.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 900;
+  const step = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function renderResult(r, { example = false, animate = false, sessionId = null, at = null, via = null } = {}) {
+  last = r; currentId = sessionId;
+  $("exampleTag").hidden = !example;
+  animate ? animateNumber($("skips"), r.skips) : ($("skips").textContent = fmtInt(r.skips));
+  $("sJump").textContent = fmtTime(r.jumpingSeconds);
+  $("sRest").textContent = fmtTime(r.restSeconds);
+  $("sPace").textContent = r.jumpingSeconds ? Math.round(60 * r.skips / r.jumpingSeconds) : "–";
+  $("sSets").textContent = r.sets.length;
+  $("sBest").textContent = r.sets.length ? Math.max(...r.sets.map(s => s.skips)) : 0;
+  $("sLen").textContent = fmtTime(r.totalSeconds);
+  $("savedRow").hidden = !sessionId;
+  if (sessionId && at) $("sessDate").value = dayKey(at);
+  $("warnSmall").hidden = !(r.bodySize < 0.5);
+  $("warnSlow").hidden = via !== "playback";
+  const box = $("sets"); box.textContent = "";
+  r.sets.forEach((s, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = s.skips;
+    b.setAttribute("aria-pressed", "false"); b.title = `Set ${i + 1}: ${s.skips} skips at ${fmtTime(s.start)}`;
+    b.onclick = () => {
+      const on = b.getAttribute("aria-pressed") !== "true"; haptic();
+      box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", String(on));
+      drawChart(on ? [Math.max(0, s.start - 1.5), s.end + 1.5] : null);
+      if (on && !$("playerCard").hidden) $("player").currentTime = Math.max(0, s.start - 0.5);
+    };
+    box.appendChild(b);
+  });
+  drawChart(null);
+  renderCalories(r.skips, r.jumpingSeconds, r.restSeconds);
+}
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function drawChart(range) {
+  const r = last, cv = $("chart"); if (!r || !r.filtered || !cv.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const fps = r.fps, x = r.filtered, n = x.length, off = r.offset || 0;
+  const sets = r.sets.map(s => ({ start: s.start - off, end: s.end - off })), times = r.skipTimes.map(t => t - off);
+  const [t0, t1] = range ? [range[0] - off, range[1] - off] : [0, n / fps];
+  const i0 = Math.max(0, Math.floor(t0 * fps)), i1 = Math.min(n, Math.ceil(t1 * fps));
+  let amp = 1e-9; // scale to the bounces inside sets, so camera handling doesn't squash them
+  for (const st of sets) for (let i = Math.max(i0, Math.floor(st.start * fps)); i < Math.min(i1, Math.ceil(st.end * fps)); i++) amp = Math.max(amp, Math.abs(x[i]));
+  if (amp === 1e-9) for (let i = i0; i < i1; i++) amp = Math.max(amp, Math.abs(x[i]));
+  const inSet = i => sets.some(st => i / fps >= st.start && i / fps <= st.end);
+  const X = t => (t - t0) / (t1 - t0) * w, Y = v => h / 2 - v / amp * (h / 2 - 14);
+  const clampY = v => Y(Math.max(-amp * 1.15, Math.min(amp * 1.15, v)));
+  g.fillStyle = cssVar("--rope-soft");
+  for (const s of sets) if (s.end > t0 && s.start < t1) g.fillRect(X(s.start), 0, Math.max(1, X(s.end) - X(s.start)), h);
+  const step = Math.max(1, Math.floor((i1 - i0) / (w * 2)));
+  g.strokeStyle = cssVar("--track"); g.lineWidth = 1.2;
+  for (const pass of [false, true]) { // faded outside sets, solid inside
+    g.globalAlpha = pass ? 1 : 0.3; g.beginPath(); let pen = false;
+    for (let i = i0; i < i1; i += step) {
+      if (inSet(i) !== pass) { pen = false; continue; }
+      let v = x[i];
+      if (step > 1) { let mn = v, mx = v; for (let k = i; k < Math.min(i + step, i1); k++) { mn = Math.min(mn, x[k]); mx = Math.max(mx, x[k]); } pen ? g.lineTo(X(i / fps), clampY(mx)) : g.moveTo(X(i / fps), clampY(mx)); pen = true; v = mn; }
+      pen ? g.lineTo(X(i / fps), clampY(v)) : g.moveTo(X(i / fps), clampY(v)); pen = true;
+    }
+    g.stroke();
+  }
+  g.globalAlpha = 1; g.fillStyle = cssVar("--rope");
+  for (const t of times) {
+    if (t < t0 || t > t1) continue;
+    if (range) { const v = x[Math.min(n - 1, Math.round(t * fps))]; g.beginPath(); g.arc(X(t), clampY(v), 3.5, 0, 7); g.fill(); }
+    else g.fillRect(X(t) - 0.75, 3, 1.5, 9); // overview: one tick per skip along the top
+  }
+}
+
+// live counter over the "check the count" player
+(function overlayLoop() {
+  const v = $("player"), o = $("overlay");
+  const tick = () => {
+    if (last && !$("playerCard").hidden) {
+      const t = v.currentTime, ts = last.skipTimes;
+      let lo = 0, hi = ts.length; while (lo < hi) { const m = (lo + hi) >> 1; if (ts[m] <= t) lo = m + 1; else hi = m; }
+      o.textContent = lo; o.classList.toggle("flash", lo > 0 && t - ts[lo - 1] < 0.12);
+    }
+    "requestVideoFrameCallback" in v && !v.paused ? v.requestVideoFrameCallback(tick) : requestAnimationFrame(tick);
+  };
+  tick();
+})();
+
+// ================================================================ hero states
+function heroState(state) { // idle | progress | live
+  $("heroIdle").hidden = state !== "idle"; $("heroActions").hidden = state !== "idle";
+  $("tips").hidden = state !== "idle"; $("heroFoot").hidden = state === "live";
+  $("progressBox").hidden = state !== "progress"; $("liveBox").hidden = state !== "live";
+}
+function setProgress(frac, text) {
+  $("progressPct").textContent = `${Math.round(frac * 100)}%`;
+  $("progressBar").firstElementChild.style.width = `${(Math.min(1, frac) * 100).toFixed(1)}%`;
+  $("progressBar").setAttribute("aria-valuenow", Math.round(frac * 100));
+  if (text) $("progressText").textContent = text;
+}
+function showError(msg) { $("error").textContent = msg; $("error").hidden = false; }
+async function wakeLock() { try { return await navigator.wakeLock?.request("screen"); } catch { return null; } }
+
+function saveResult(r, at, source, via) {
+  const s = addSession(sessionFromResult(r, at, source)); haptic(20);
+  renderResult(r, { animate: true, sessionId: s.id, at, via });
+  toast(`Saved ${fmtInt(r.skips)} skips to Insights`, () => { removeSession(s.id); $("savedRow").hidden = true; currentId = null; toast("Removed from Insights"); });
+}
+
+// ================================================================ analyse a video
+let videoUrl = null;
+async function analyseFile(file) {
+  $("error").hidden = true; heroState("progress"); setProgress(0, "Opening video…");
+  const lock = await wakeLock();
+  try {
+    const out = await SkipEngine.analyse(file, {
+      onProgress: (f, eta) => setProgress(f, f < 0.02 ? "Reading video…" : `Counting… ${eta != null ? `about ${fmtTime(Math.max(0, eta))} left` : ""}`)
+    });
+    window.__skipDebug = { via: out.via, frames: out.frames, seconds: out.seconds, skipTimes: out.result.skipTimes, bodySize: out.result.bodySize };
+    heroState("idle");
+    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    videoUrl = URL.createObjectURL(file); $("player").src = videoUrl; $("playerCard").hidden = false;
+    const r = out.result;
+    $("speedNote").hidden = false;
+    $("speedNote").textContent = `Analysed ${fmtTime(r.totalSeconds)} of video in ${fmtTime(out.seconds)}.`;
+    if (r.skips > 0) saveResult(r, out.recordedAt, "video", out.via);
+    else { renderResult(r, { via: out.via }); toast("No skips found in this video"); }
+    $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  } catch (e) {
+    console.error(e); heroState("idle");
+    showError(`Couldn't analyse this video: ${e.message || e}. Try a video recorded with your phone's normal camera app.`);
+  } finally { $("file").value = ""; try { await lock?.release(); } catch {} }
+}
+
+// ================================================================ live counting
+let live = null;
+async function startLive() {
+  $("error").hidden = true;
+  if (!navigator.mediaDevices?.getUserMedia) { showError("This browser can't use the camera here. Record a video and choose it instead."); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } }); }
+  catch (e) { showError("Camera access was blocked. Allow the camera for this site, or record a video and choose it instead."); return; }
+  heroState("live");
+  const v = $("liveVideo"); v.srcObject = stream; v.style.transform = "scaleX(-1)"; // mirror like a selfie
+  try { await v.play(); } catch {}
+  const pool = await SkipEngine.Pool.create();
+  const track = stream.getVideoTracks()[0];
+  live = { stream, pool, stop: false, started: performance.now(), lock: await wakeLock(), dropped: 0 };
+  $("liveCount").textContent = "0"; $("liveTime").textContent = "0:00";
+  const st = track.getSettings();
+  const srcW = st.width || v.videoWidth || 1280, srcH = st.height || v.videoHeight || 720;
+  if ("MediaStreamTrackProcessor" in window) {
+    pool.setGeometry(srcW, srcH, 0);
+    const reader = new MediaStreamTrackProcessor({ track }).readable.getReader();
+    live.reader = reader;
+    (async () => {
+      while (!live.stop) {
+        const { value: frame, done } = await reader.read(); if (done || !frame) break;
+        if (live.stop || pool.inFlight > pool.size * 4) { frame.close(); live.dropped++; continue; } // falling behind: skip a frame
+        pool.pushFrame(frame, frame.timestamp / 1e6);
+      }
+    })();
+  } else {
+    await new Promise(r => v.videoWidth ? r() : (v.onloadedmetadata = r));
+    pool.setGeometry(v.videoWidth, v.videoHeight, 0);
+    const step = (now, meta) => {
+      if (live.stop) return;
+      if (pool.inFlight <= pool.size * 4) pool.pushGray(pool.shrinker.element(v), meta ? meta.mediaTime : v.currentTime); else live.dropped++;
+      "requestVideoFrameCallback" in v ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step());
+    };
+    "requestVideoFrameCallback" in v ? v.requestVideoFrameCallback(step) : requestAnimationFrame(() => step());
+  }
+  live.timer = setInterval(() => {
+    $("liveTime").textContent = fmtTime((performance.now() - live.started) / 1000);
+    if (pool.tracker && pool.tracker.ts.length > 90) {
+      try { const r = SkipEngine.countFrom(pool.tracker); $("liveCount").textContent = fmtInt(r.skips); } catch {}
+    }
+  }, 1500);
+}
+async function stopLive() {
+  if (!live) return;
+  const L = live; L.stop = true; clearInterval(L.timer);
+  try { await L.reader?.cancel(); } catch {}
+  L.stream.getTracks().forEach(t => t.stop()); $("liveVideo").srcObject = null;
+  heroState("progress"); setProgress(1, "Working out the final count…");
+  try {
+    const tracker = await L.pool.finish();
+    if (!tracker || tracker.ts.length < 60) throw new Error("That was too short to count.");
+    const r = SkipEngine.countFrom(tracker);
+    window.__skipDebug = { via: "live", frames: tracker.ts.length, dropped: L.dropped, skipTimes: r.skipTimes };
+    heroState("idle"); $("playerCard").hidden = true; $("speedNote").hidden = true;
+    if (r.skips > 0) saveResult(r, new Date(), "live", "live");
+    else { renderResult(r); toast("No skips found"); }
+    $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  } catch (e) { heroState("idle"); showError(e.message || String(e)); }
+  finally { try { await L.lock?.release(); } catch {} live = null; }
+}
+
+// ================================================================ greeting, streak, week dots
+function byDay() {
+  const m = new Map();
+  for (const s of sessions) {
+    const k = dayKey(s.at), d = m.get(k) || { skips: 0, kcal: 0, sec: 0, n: 0 };
+    d.skips += s.skips; d.kcal += s.kcal || 0; d.sec += s.jumpS; d.n++; m.set(k, d);
+  }
+  return m;
+}
+function streaks(days) {
+  let cur = 0, d = startOfDay(new Date());
+  if (!days.has(dayKey(d))) d = addDays(d, -1); // today not done yet: streak still counts from yesterday
+  while (days.has(dayKey(d))) { cur++; d = addDays(d, -1); }
+  const keys = [...days.keys()].sort(); let best = 0, run = 0, prev = null;
+  for (const k of keys) { const dt = new Date(k + "T00:00"); run = prev && (dt - prev) / 864e5 === 1 ? run + 1 : 1; best = Math.max(best, run); prev = dt; }
+  return { cur, best };
+}
+function renderHome() {
+  const now = new Date(), h = now.getHours();
+  $("today").textContent = fmtDate(now, { weekday: "long", day: "numeric", month: "long" });
+  $("greet").textContent = h < 5 ? "Late session?" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  const days = byDay(), { cur } = streaks(days);
+  $("streakNum").innerHTML = `${cur}<small>day streak</small>`;
+  $("flame").classList.toggle("on", cur > 0);
+  const mon = mondayOf(now), box = $("weekDots"); box.textContent = "";
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(mon, i), k = dayKey(d), el = document.createElement("div"), dot = document.createElement("i");
+    if (days.has(k)) dot.classList.add("done");
+    if (k === dayKey(now)) dot.classList.add("today");
+    dot.title = days.has(k) ? `${fmtInt(days.get(k).skips)} skips` : fmtDate(d, { weekday: "long" });
+    el.append(dot, DOW[i]); box.appendChild(el);
+  }
+}
+
+// ================================================================ insights
+const ins = { p: "week", anchor: mondayOf(new Date()), metric: "skips" };
+function periodStart(p, d) { d = startOfDay(d); if (p === "week") return mondayOf(d); if (p === "month") return new Date(d.getFullYear(), d.getMonth(), 1); if (p === "year") return new Date(d.getFullYear(), 0, 1); return d; }
+function periodShift(p, d, n) { d = new Date(d); if (p === "day") return addDays(d, n); if (p === "week") return addDays(d, 7 * n); if (p === "month") return new Date(d.getFullYear(), d.getMonth() + n, 1); return new Date(d.getFullYear() + n, 0, 1); }
+function periodTitle(p, s) {
+  const now = new Date(), cur = periodStart(p, now);
+  if (p === "day") { const diff = Math.round((startOfDay(now) - s) / 864e5); return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : fmtDate(s, { weekday: "short", day: "numeric", month: "short", year: s.getFullYear() !== now.getFullYear() ? "numeric" : undefined }); }
+  if (p === "week") { if (+s === +cur) return "This week"; if (+s === +addDays(cur, -7)) return "Last week"; const e = addDays(s, 6); return `${fmtDate(s, { day: "numeric", month: "short" })} – ${fmtDate(e, { day: "numeric", month: "short", year: e.getFullYear() !== now.getFullYear() ? "numeric" : undefined })}`; }
+  if (p === "month") return fmtDate(s, { month: "long", year: "numeric" });
+  return String(s.getFullYear());
+}
+function inRange(a, b) { return sessions.filter(s => s.at >= +a && s.at < +b); }
+function totals(list) { return list.reduce((t, s) => ({ skips: t.skips + s.skips, kcal: t.kcal + (s.kcal || 0), sec: t.sec + s.jumpS, n: t.n + 1, days: t.days.add(dayKey(s.at)) }), { skips: 0, kcal: 0, sec: 0, n: 0, days: new Set() }); }
+
+function renderInsights() {
+  const p = ins.p, s = ins.anchor, e = periodShift(p, s, 1), list = inRange(s, e), T = totals(list);
+  const prevT = totals(inRange(periodShift(p, s, -1), s));
+  $("periodTitle").textContent = periodTitle(p, s);
+  $("nextP").disabled = +e > Date.now();
+  const delta = (a, b) => { if (!b) return ""; const d = Math.round((a - b) / b * 100); return `<span class="delta ${d >= 0 ? "up" : ""}">${d >= 0 ? "▲" : "▼"} ${Math.abs(d)}% vs previous</span>`; };
+  const tiles = [
+    [fmtCompact(T.skips), "skips", delta(T.skips, prevT.skips)],
+    [fmtKcal(T.kcal), "kcal burned", delta(T.kcal, prevT.kcal)],
+    [fmtMin(T.sec), "jumping", delta(T.sec, prevT.sec)],
+    p === "day" ? [String(T.n), T.n === 1 ? "session" : "sessions", ""] : [String(T.days.size), T.days.size === 1 ? "active day" : "active days", ""]
+  ];
+  $("tiles").innerHTML = tiles.map(([v, l, d]) => `<div class="tile"><b>${v}</b><span>${l}</span>${d}</div>`).join("");
+  renderBars(p, s, e, list);
+  renderSessions(list, p);
+  renderHeat();
+}
+
+function renderBars(p, s, e, list) {
+  const metric = ins.metric, val = x => metric === "skips" ? x.skips : metric === "kcal" ? (x.kcal || 0) : x.jumpS / 60;
+  const fmtV = v => metric === "skips" ? fmtInt(v) : metric === "kcal" ? fmtKcal(v) : `${Math.round(v)}m`;
+  let cols = [];
+  if (p === "day") { $("barsLabel").textContent = "Per session"; cols = list.map(x => ({ label: new Date(x.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }), v: val(x) })); }
+  else if (p === "week") { $("barsLabel").textContent = "Per day"; for (let i = 0; i < 7; i++) { const d = addDays(s, i), k = dayKey(d); cols.push({ label: DOW[i], v: list.filter(x => dayKey(x.at) === k).reduce((a, x) => a + val(x), 0), today: k === dayKey(new Date()) }); } }
+  else if (p === "month") { $("barsLabel").textContent = "Per day"; const n = new Date(s.getFullYear(), s.getMonth() + 1, 0).getDate(); for (let i = 0; i < n; i++) { const k = dayKey(addDays(s, i)); cols.push({ label: (i + 1) % 5 === 1 || i === n - 1 ? String(i + 1) : "", v: list.filter(x => dayKey(x.at) === k).reduce((a, x) => a + val(x), 0) }); } }
+  else { $("barsLabel").textContent = "Per month"; for (let m = 0; m < 12; m++) cols.push({ label: fmtDate(new Date(s.getFullYear(), m, 1), { month: "narrow" }), v: list.filter(x => new Date(x.at).getMonth() === m).reduce((a, x) => a + val(x), 0) }); }
+  const bars = $("bars"); bars.classList.remove("in"); bars.innerHTML = "";
+  if (!cols.length) { bars.innerHTML = `<div class="empty" style="flex:1;align-self:center"><b>No sessions this day</b>Count one on the Count tab.</div>`; return; }
+  const max = Math.max(...cols.map(c => c.v), 1e-9);
+  cols.forEach((c, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "col";
+    b.setAttribute("aria-label", `${c.label || i + 1}: ${fmtV(c.v)}`);
+    b.innerHTML = `<span class="val">${fmtV(c.v)}</span><span class="bar"><i class="${c.v ? "" : "zero"}" style="height:${c.v ? Math.max(3, c.v / max * 100) : 0}%;transition-delay:${Math.min(i * 28, 500)}ms"></i></span><em>${c.label}</em>`;
+    b.onclick = () => { const on = !b.classList.contains("sel"); bars.querySelectorAll(".col").forEach(x => x.classList.remove("sel")); if (on) b.classList.add("sel"); haptic(); };
+    bars.appendChild(b);
+  });
+  // highlight the best column by default
+  const best = cols.reduce((bi, c, i) => c.v > cols[bi].v ? i : bi, 0);
+  if (cols[best].v > 0) bars.children[best].classList.add("sel");
+  requestAnimationFrame(() => requestAnimationFrame(() => bars.classList.add("in")));
+}
+
+function renderSessions(list, p) {
+  const box = $("sessions"); box.innerHTML = "";
+  $("sessCount").textContent = list.length ? `${list.length}` : "";
+  if (!list.length) {
+    box.innerHTML = sessions.length
+      ? `<div class="empty"><b>Nothing in this ${p}</b>Use the arrows to look at other ${p}s.</div>`
+      : `<div class="empty"><b>No sessions yet</b>Count a video or a live session and it shows up here, with your streak and heatmap.</div>`;
+    return;
+  }
+  for (const s of [...list].reverse()) {
+    const row = document.createElement("div"); row.className = "sess";
+    const d = new Date(s.at), src = s.source === "live" ? "live" : s.source === "manual" ? "added by hand" : "video";
+    row.innerHTML = `<div class="when"><b>${fmtDate(d, { weekday: "short", day: "numeric", month: "short" })} · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</b>
+      <span>${fmtMin(s.jumpS)} · ${s.sets?.length ? `${s.sets.length} set${s.sets.length === 1 ? "" : "s"} · ` : ""}${fmtKcal(s.kcal || 0)} kcal · ${src}${s.note ? ` · ${escapeHtml(s.note)}` : ""}</span></div>
+      <span class="n">${fmtInt(s.skips)}</span><button type="button" class="del" aria-label="Delete this session">Delete</button>`;
+    const del = row.querySelector(".del");
+    del.onclick = () => {
+      if (!del.classList.contains("confirm")) { del.classList.add("confirm"); del.textContent = "Tap to confirm"; haptic(); setTimeout(() => { del.classList.remove("confirm"); del.textContent = "Delete"; }, 3000); return; }
+      const removed = removeSession(s.id);
+      if (s.id === currentId) { $("savedRow").hidden = true; currentId = null; }
+      toast("Session deleted", () => SkipJournal.restore(removed));
+    };
+    box.appendChild(row);
+  }
+}
+
+function renderHeat() {
+  const days = byDay(), today = startOfDay(new Date());
+  const start = addDays(mondayOf(today), -52 * 7), box = $("heat"); box.innerHTML = "";
+  const vals = [...days.values()].map(d => d.skips).filter(v => v > 0).sort((a, b) => a - b);
+  const q = f => vals.length ? vals[Math.min(vals.length - 1, Math.floor(f * vals.length))] : 1;
+  const cut = [q(0.25), q(0.5), q(0.75)];
+  let lastMonth = -1, active = 0;
+  for (let w = 0; w < 53; w++) {
+    const wk = addDays(start, w * 7), m = document.createElement("span"); m.className = "m";
+    const firstOfMonth = [...Array(7)].map((_, i) => addDays(wk, i)).find(d => d.getDate() === 1);
+    if (firstOfMonth && firstOfMonth.getMonth() !== lastMonth && w < 51) { m.textContent = fmtDate(firstOfMonth, { month: "short" }); lastMonth = firstOfMonth.getMonth(); }
+    if (w === 0) { m.textContent = fmtDate(wk, { month: "short" }); lastMonth = wk.getMonth(); }
+    box.appendChild(m);
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(wk, i), k = dayKey(d), c = document.createElement("span"), v = days.get(k)?.skips || 0;
+      c.className = "d";
+      if (d > today) c.classList.add("future");
+      else if (v > 0) { active++; c.classList.add(v <= cut[0] ? "l1" : v <= cut[1] ? "l2" : v <= cut[2] ? "l3" : "l4"); }
+      if (k === dayKey(today)) c.classList.add("today");
+      c.title = `${fmtDate(d, { weekday: "short", day: "numeric", month: "short" })}: ${v ? `${fmtInt(v)} skips` : "no skipping"}`;
+      box.appendChild(c);
+    }
+  }
+  const { cur, best } = streaks(days);
+  $("heatSummary").textContent = `${active} active day${active === 1 ? "" : "s"} · best streak ${best}`;
+  const sc = $("heatScroll"); sc.scrollLeft = sc.scrollWidth;
+}
+
+// ================================================================ segmented controls & tabs (sliding pills)
+function placePill(seg) {
+  const pill = seg.querySelector(".pill"), on = seg.querySelector('[aria-pressed="true"]'); if (!pill || !on || !on.offsetWidth) return;
+  pill.style.width = `${on.offsetWidth}px`; pill.style.transform = `translateX(${on.offsetLeft}px)`;
+}
+function setupSeg(seg, onPick) {
+  seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b || b.getAttribute("aria-pressed") === "true") return;
+    seg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    placePill(seg); haptic(); onPick(b);
+  });
+}
+setupSeg($("periodSeg"), b => { ins.p = b.dataset.p; ins.anchor = periodStart(ins.p, new Date()); renderInsights(); });
+setupSeg($("metricSeg"), b => { ins.metric = b.dataset.m; renderInsights(); });
+$("prevP").onclick = () => { ins.anchor = periodShift(ins.p, ins.anchor, -1); haptic(); renderInsights(); };
+$("nextP").onclick = () => { ins.anchor = periodShift(ins.p, ins.anchor, 1); haptic(); renderInsights(); };
+
+function placeTabPill() {
+  const on = document.querySelector('.tabbar [aria-selected="true"] .ic'), pill = $("tabPill"), inner = pill.parentElement;
+  const a = on.getBoundingClientRect(), b = inner.getBoundingClientRect();
+  pill.style.transform = `translate(${a.left - b.left}px, ${a.top - b.top}px)`;
+}
+function showTab(name, push = true) {
+  for (const t of ["count", "insights"]) {
+    $("view-" + t).hidden = t !== name;
+    $("tab-" + t).setAttribute("aria-selected", String(t === name));
+  }
+  placeTabPill();
+  if (name === "insights") { renderInsights(); placePill($("periodSeg")); placePill($("metricSeg")); }
+  else drawChart(null);
+  if (push) { try { history.replaceState(null, "", name === "count" ? location.pathname + location.search : "#insights"); } catch {} }
+  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+document.querySelectorAll(".tabbar [data-tab]").forEach(b => b.addEventListener("click", () => { if (b.getAttribute("aria-selected") !== "true") { haptic(); showTab(b.dataset.tab); } }));
+addEventListener("hashchange", () => showTab(location.hash === "#insights" ? "insights" : "count", false));
+addEventListener("resize", () => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });
+
+function refreshAll() { renderHome(); if (!$("view-insights").hidden) renderInsights(); }
+
+// ================================================================ theme
+(function theme() {
+  const saved = store.get("skipcount.theme", null);
+  if (saved) document.documentElement.dataset.theme = saved;
+  $("themeBtn").onclick = () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const next = dark ? "light" : "dark"; document.documentElement.dataset.theme = next; store.set("skipcount.theme", next); haptic(); drawChart(null);
+  };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => drawChart(null));
+})();
+
+// ================================================================ wiring
+loadProfile();
+let updatedTimer = 0;
+function profileChanged() {
+  saveProfile();
+  if (!calSource) return;
+  const before = $("kTotal").textContent, c = renderCalories(calSource.skips, calSource.jumpS, calSource.restS);
+  if (currentId) updateSession(currentId, { kcal: Math.round(c.total * 10) / 10 });
+  const p = profile();
+  const w = $("weightUnit").value === "lb" ? `${Math.round(p.kg / 0.45359237)} lb` : `${Math.round(p.kg * 10) / 10} kg`;
+  const h = $("heightUnit").value === "cm" ? `${Math.round(p.cm)} cm` : `${$("heightFt").value}′${$("heightIn").value}″`;
+  $("updated").textContent = `✓ Updated for ${w} · ${h} · ${p.age} · ${p.sex}`;
+  $("updated").classList.add("show");
+  if ($("kTotal").textContent !== before) { const n = $("kTotal"); n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash"); }
+  clearTimeout(updatedTimer); updatedTimer = setTimeout(() => $("updated").classList.remove("show"), 3500);
+}
+for (const id of ["weight", "heightCm", "heightFt", "heightIn", "age"]) $(id).addEventListener("input", profileChanged);
+document.querySelectorAll('input[name="sex"]').forEach(r => r.addEventListener("change", profileChanged));
+$("weightUnit").addEventListener("change", e => { // convert, so switching units doesn't change your weight
+  const v = parseFloat($("weight").value);
+  if (v > 0) $("weight").value = e.target.value === "lb" ? Math.round(v / 0.45359237) : Math.round(v * 0.45359237 * 10) / 10;
+  profileChanged();
+});
+let heightUnitNow = $("heightUnit").value;
+for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change", e => {
+  const cm = heightUnitNow === "cm" ? parseFloat($("heightCm").value) || 175 : (parseFloat($("heightFt").value) || 0) * 30.48 + (parseFloat($("heightIn").value) || 0) * 2.54;
+  heightUnitNow = e.target.value; showHeightUnit(e.target.value);
+  if (e.target.value === "cm") $("heightCm").value = Math.round(cm);
+  else { const inches = cm / 2.54; let ft = Math.floor(inches / 12), inch = Math.round(inches - ft * 12); if (inch === 12) { ft++; inch = 0; } $("heightFt").value = ft; $("heightIn").value = inch; }
+  profileChanged();
+});
+$("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyseFile(f); });
+$("liveBtn").addEventListener("click", startLive);
+$("liveStop").addEventListener("click", stopLive);
+$("sessDate").addEventListener("change", e => {
+  if (!currentId || !e.target.value) return;
+  const s = sessions.find(x => x.id === currentId), old = new Date(s.at), [y, m, d] = e.target.value.split("-").map(Number);
+  updateSession(currentId, { at: +new Date(y, m - 1, d, old.getHours(), old.getMinutes()) });
+  toast(`Moved to ${fmtDate(new Date(y, m - 1, d), { weekday: "short", day: "numeric", month: "short" })}`);
+});
+$("mDate").value = dayKey(new Date());
+$("mGo").addEventListener("click", () => {
+  const skips = parseInt($("mSkips").value, 10), min = parseFloat($("mMin").value), rest = parseFloat($("mRest").value) || 0;
+  if (!(skips > 0)) { $("mSkips").focus(); toast("Enter how many skips"); return; }
+  if (!(min > 0)) { $("mMin").focus(); toast("Enter how many minutes you jumped"); return; }
+  const [y, m, d] = ($("mDate").value || dayKey(new Date())).split("-").map(Number), now = new Date();
+  const c = kcalFor(skips, min * 60, rest * 60);
+  const s = addSession({ at: +new Date(y, m - 1, d, now.getHours(), now.getMinutes()), source: "manual", skips, jumpS: min * 60, restS: rest * 60, sets: [], kcal: c.total }); haptic(20);
+  $("mSkips").value = $("mMin").value = $("mRest").value = "";
+  toast(`Added ${fmtInt(skips)} skips · ${fmtKcal(c.total)} kcal`, () => { removeSession(s.id); toast("Removed"); });
+});
+$("exportBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ app: "skip-count", version: 1, exported: new Date().toISOString(), profile: store.get("skipcount.profile", null), sessions: SkipJournal.list() }, null, 1)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `skip-count-backup-${dayKey(new Date())}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`Backup saved (${sessions.length} sessions)`);
+});
+$("importFile").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text()), list = Array.isArray(data) ? data : data.sessions;
+    if (!Array.isArray(list)) throw new Error("not a Skip Count backup");
+    const added = SkipJournal.importMany(list);
+    toast(`Restored ${added} session${added === 1 ? "" : "s"}`);
+  } catch (err) { toast(`Couldn't read that file: ${err.message}`); }
+});
+
+// ================================================================ start
+// Example: the verified 39 s test clip (51 skips by hand count), so the Count tab opens with real numbers.
+(function example() {
+  const sets = [[0.85, 8.18, 19], [16.1, 19.55, 9], [21.7, 25.6, 10], [28.1, 30.0, 5], [31.5, 34.6, 8]];
+  const gt = [1.03,1.5,1.9,2.26,2.63,3.0,3.4,3.8,4.16,4.6,5.0,5.33,5.66,6.06,6.43,6.83,7.16,7.56,7.93,16.29,16.69,17.09,17.45,17.85,18.22,18.58,18.95,19.35,21.88,22.35,22.75,23.11,23.48,23.88,24.28,24.65,25.05,25.41,28.24,28.68,29.07,29.44,29.84,31.64,32.04,32.41,32.81,33.2,33.6,34.0,34.4];
+  const fps = 30, n = 39 * fps, x = new Float64Array(n);
+  for (const [s, e] of sets) for (let i = Math.floor(s * fps); i < e * fps; i++) {
+    let d = Infinity; for (const g of gt) d = Math.min(d, Math.abs(g - i / fps));
+    x[i] = Math.cos(Math.min(d, 0.19) / 0.385 * 2 * Math.PI) * 0.18;
+  }
+  const jump = sets.reduce((a, s) => a + s[1] - s[0], 0);
+  renderResult({ skips: 51, skipTimes: gt, sets: sets.map(([start, end, skips]) => ({ start, end, skips })), jumpingSeconds: jump,
+    totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps, offset: 0, bodySize: 0.7 }, { example: true });
+})();
+window.loadProfile = loadProfile; window.renderCalories = renderCalories;
+renderHome();
+showTab(location.hash === "#insights" ? "insights" : "count", false);
+document.fonts?.ready.then(() => { placeTabPill(); placePill($("periodSeg")); placePill($("metricSeg")); drawChart(null); });
+
+</script>
 
 </body>
 </html>
