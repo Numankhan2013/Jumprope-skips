@@ -101,6 +101,7 @@ function animateNumber(el, to, fmt = fmtInt) {
   requestAnimationFrame(step);
 }
 function renderResult(r, opts = {}) {
+  $("selfCountRow").hidden = true; // shown again after a pocket session (it has a recording to attach to)
   const { example = false, animate = false, sessionId = null, at = null, via = null } = opts;
   last = r; currentId = sessionId;
   $("exampleTag").hidden = !example; $("resultLabel").hidden = !opts.lastLabel;
@@ -638,12 +639,27 @@ function teardownPocket() {
   return P;
 }
 function closePocketScreen() { $("pocket").hidden = true; $("pocketDiscard").classList.remove("confirm"); $("pocketDiscard").textContent = "Discard"; }
+// Recordings of the last REC_KEEP pocket sessions (raw motion), so they can be sent to tune the counter.
+const REC_KEEP = 20;
+let lastRecKey = null;
+async function keepRecording(rec) {
+  const key = `pocket-rec-${rec.started}`, list = (await SkipEngine.idb.get("pocket-recs")) || [];
+  await SkipEngine.idb.put(key, rec);
+  list.push({ key, started: rec.started });
+  while (list.length > REC_KEEP) { const old = list.shift(); await SkipEngine.idb.del(old.key); }
+  await SkipEngine.idb.put("pocket-recs", list);
+  paintRecCount();
+  return key;
+}
+async function paintRecCount() { const list = (await SkipEngine.idb.get("pocket-recs")) || []; $("pocketAllBtn").textContent = `Save all recordings (${list.length})`; $("pocketAllBtn").disabled = !list.length; }
 async function finishPocketSession() {
   const P = teardownPocket(); closePocketScreen(); if (!P) return;
   haptic(30);
   const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, awake: P.lock.how() };
   // keep the raw sensor data of the last session, so it can be checked (Profile > Pocket recording)
-  SkipEngine.idb.put("pocket-last", { ...packMotion(P), diag, ua: navigator.userAgent });
+  const rec = { ...packMotion(P), diag, ua: navigator.userAgent };
+  SkipEngine.idb.put("pocket-last", rec);
+  lastRecKey = await keepRecording(rec);
   await finishPocket(P.t, motionOf(packMotion(P)), P.started, diag, { committed: P.committed, lastT: P.lastCommitT });
 }
 function discardPocket() {
@@ -685,6 +701,7 @@ async function finishPocket(t, a, started, diag, live) {
     $("playerCard").hidden = true; $("speedNote").hidden = true;
     if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
     else { renderResult(r); showError(pocketDiagnosis(t, diag)); }
+    $("selfCountRow").hidden = !lastRecKey; $("selfCount").value = "";
     window.__skipDebug = { via: "pocket", samples: t.length, skipTimes: r.skipTimes, diag };
     $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
   } catch (e) { showError(e.message || String(e)); }
@@ -976,17 +993,34 @@ window.onCloudStatus = (status, user) => {
 };
 
 // ================================================================ pocket recording (to tune the counter to a real pocket)
+const recForExport = r => ({ app: "skip-count", kind: "pocket-recording", started: new Date(r.started).toISOString(), ua: r.ua, diag: r.diag,
+  ...(r.selfCount ? { selfCount: r.selfCount } : {}), t: Array.from(r.t, v => Math.round(v * 1000) / 1000),
+  ...(r.x ? { x: Array.from(r.x, v => Math.round(v * 100) / 100), y: Array.from(r.y, v => Math.round(v * 100) / 100), z: Array.from(r.z, v => Math.round(v * 100) / 100) } : { a: Array.from(r.a, v => Math.round(v * 100) / 100) }) });
+function download(name, obj) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(obj)], { type: "application/json" }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
 $("pocketRecBtn").onclick = async () => {
   const r = await SkipEngine.idb.get("pocket-last");
   if (!r || !r.t || !r.t.length) { toast("No pocket recording yet. Do a pocket session first."); return; }
-  const data = { app: "skip-count", kind: "pocket-recording", started: new Date(r.started).toISOString(), ua: r.ua, diag: r.diag,
-    t: Array.from(r.t, v => Math.round(v * 1000) / 1000),
-    ...(r.x ? { x: Array.from(r.x, v => Math.round(v * 100) / 100), y: Array.from(r.y, v => Math.round(v * 100) / 100), z: Array.from(r.z, v => Math.round(v * 100) / 100) } : { a: Array.from(r.a, v => Math.round(v * 100) / 100) }) };
-  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
-  a.download = `skip-count-pocket-${dayKey(r.started)}.json`; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  const list = (await SkipEngine.idb.get("pocket-recs")) || [], full = list.length ? await SkipEngine.idb.get(list[list.length - 1].key) : null;
+  download(`skip-count-pocket-${dayKey(r.started)}.json`, recForExport(full && full.started === r.started ? full : r));
   toast(`Saved a recording of ${fmtTime(r.t.length / 60)} of motion data`);
 };
+$("pocketAllBtn").onclick = async () => {
+  const list = (await SkipEngine.idb.get("pocket-recs")) || []; if (!list.length) { toast("No recordings yet"); return; }
+  const items = []; for (const it of list) { const r = await SkipEngine.idb.get(it.key); if (r && r.t) items.push(recForExport(r)); }
+  download(`skip-count-pocket-recordings-${dayKey(new Date())}.json`, { app: "skip-count", kind: "pocket-recordings", items });
+  toast(`Saved ${items.length} recording${items.length === 1 ? "" : "s"} in one file`);
+};
+// "Counted yourself?" on a pocket result: stored with that session's recording, as ground truth
+$("selfCountSave").onclick = async () => {
+  const v = Math.round(+$("selfCount").value); if (!(v > 0) || !lastRecKey) { $("selfCount").focus(); return; }
+  const rec = await SkipEngine.idb.get(lastRecKey); if (!rec) return;
+  rec.selfCount = v; await SkipEngine.idb.put(lastRecKey, rec);
+  $("selfCountRow").hidden = true; toast(`Noted: you counted ${fmtInt(v)}. It's saved with this session's recording.`);
+};
+paintRecCount();
 
 // ================================================================ install as an app
 // Chrome/Edge/Android: offer the real install prompt. iPhone/iPad: explain Share > Add to Home Screen.

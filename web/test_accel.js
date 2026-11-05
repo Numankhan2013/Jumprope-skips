@@ -209,6 +209,26 @@ for (const [name, w] of [
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)}        : final ${shown}, truth ${w.truth}, on screen vs done: avg off ${avg.toFixed(1)}, most ahead ${ahead}`);
 }
+// Real recordings (tests/data/*.json): the true count was established from the data itself.
+// Final count must be exact; the live screen (recount every second, settled + recent) must
+// track the landings, ignoring the first 3 s (the countdown, while the phone is put away).
+for (const f of require("fs").readdirSync(require("path").join(__dirname, "..", "tests", "data")).filter(n => n.endsWith(".json"))) {
+  const d = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "tests", "data", f), "utf8"));
+  const k0 = d.t.findIndex(q => q >= d.t[0] + 3), t = d.t.slice(k0), a = d.x ? { x: d.x.slice(k0), y: d.y.slice(k0), z: d.z.slice(k0) } : d.a.slice(k0);
+  const sl = (A, m) => Array.isArray(A) ? A.slice(0, m) : { x: A.x.slice(0, m), y: A.y.slice(0, m), z: A.z.slice(0, m) };
+  const r = core.countAccel(t, a), committed = []; let lastT = -Infinity, shown = 0, ahead = 0, off = 0, n = 0;
+  for (let s1 = t[0] + 3; s1 <= t[t.length - 1] + 0.01; s1 += 1) {
+    let m = t.findIndex(q => q > s1); if (m < 0) m = t.length; if (m < 200) continue;
+    const rr = core.countAccel(t.slice(0, m), sl(a, m));
+    for (const q of rr.skipTimes) if (q > lastT + 0.15 && q <= t[m - 1] - 4) { committed.push(q); lastT = q; }
+    shown = committed.length + rr.skipTimes.filter(q => q > lastT + 0.15).length;
+    const done = r.skipTimes.filter(q => q <= t[m - 1]).length; ahead = Math.max(ahead, shown - done); off += Math.abs(shown - done); n++;
+  }
+  // skips are timed mid-jump, a moment before the landing, so the screen can be a skip or two "early"
+  const pass = r.skips === d.skips && shown === d.skips && ahead <= 3 && off / n <= 1;
+  ok &&= pass;
+  console.log(`${pass ? "ok  " : "FAIL"} ${("real: " + f).padEnd(44)}        : counted ${r.skips}, live screen ended on ${shown}, truth ${d.skips}, avg off ${(off / n).toFixed(1)}, most ahead ${ahead}`);
+}
 // a long session: 40 minutes, ~5,000 skips with rests
 const plan = []; for (let i = 0; i < 25; i++) plan.push(["jump", 200, 115 + (i % 4) * 8], ["rest", 25 + (i % 3) * 10], ...(i % 5 === 4 ? [["walk", 8]] : []));
 const w = workout(plan, 7), t0 = Date.now(), r = core.countAccel(w.t, w.a);
