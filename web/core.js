@@ -350,22 +350,26 @@
   // averaged over ~2 s) and use only the vertical part: that makes it work in any
   // orientation and on an arm, where the rope-turning circle would otherwise add a
   // second bump per skip to the total.
-  function countAccel(t, a, opts = {}) {
-    if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
-    const G = 9.81;
-    let r0, v;
-    if (Array.isArray(a) || ArrayBuffer.isView(a)) { r0 = resample(t, a, ACCEL_HZ); v = r0.a; }
-    else {
-      const rx = resample(t, a.x, ACCEL_HZ), ry = resample(t, a.y, ACCEL_HZ), rz = resample(t, a.z, ACCEL_HZ);
-      r0 = rx;
-      const lp = c => filtfilt([biquad(0.4, ACCEL_HZ, "low")], c); // gravity: the slow part of each axis
-      const gx = lp(rx.a), gy = lp(ry.a), gz = lp(rz.a);
-      v = new Float64Array(rx.a.length);
-      for (let i = 0; i < v.length; i++) {
-        const n = Math.hypot(gx[i], gy[i], gz[i]) || 1;
-        v[i] = (rx.a[i] * gx[i] + ry.a[i] * gy[i] + rz.a[i] * gz[i]) / n; // vertical specific force
-      }
+  // Vertical force at an even 50 Hz. a: |a| per sample, or the three axes {x, y, z} of
+  // accelerationIncludingGravity. With axes we work out which way is down (gravity,
+  // averaged over ~2 s) and keep only the vertical part, so the phone can sit any way round
+  // and an arm's rope-turning circle mostly drops out.
+  function accelVertical(t, a) {
+    if (Array.isArray(a) || ArrayBuffer.isView(a)) { const r0 = resample(t, a, ACCEL_HZ); return { v: r0.a, offset: r0.offset }; }
+    const rx = resample(t, a.x, ACCEL_HZ), ry = resample(t, a.y, ACCEL_HZ), rz = resample(t, a.z, ACCEL_HZ);
+    const lp = c => filtfilt([biquad(0.4, ACCEL_HZ, "low")], c); // gravity: the slow part of each axis
+    const gx = lp(rx.a), gy = lp(ry.a), gz = lp(rz.a), v = new Float64Array(rx.a.length);
+    for (let i = 0; i < v.length; i++) {
+      const n = Math.hypot(gx[i], gy[i], gz[i]) || 1;
+      v[i] = (rx.a[i] * gx[i] + ry.a[i] * gy[i] + rz.a[i] * gz[i]) / n;
     }
+    return { v, offset: rx.offset };
+  }
+
+  // One-by-one jump detector: moments in the air (and, on an arm, landing jolts).
+  // Exact when jumps are clear; misses low, efficient hops. Times are relative to the start.
+  function countAccelEvents(v, opts = {}) {
+    const G = 9.81;
     // Count the moments in the air. A phone that leaves the ground with you feels much
     // lighter than 1 g for as long as you're up (it's falling with you). Walking, standing,
     // landing, a loose phone rattling, and the arm's rope-turning swing only ever push the
@@ -437,12 +441,102 @@
     const r = { skips: skipTimes.length, skipTimes, sets, jumpingSeconds: jumping, totalSeconds: total, restSeconds: Math.max(0, total - jumping),
       cadenceHz: 1 / beat, filtered, active: Array.from(sm, () => true), filled };
 
-    r.skipTimes = r.skipTimes.map(x => x + r0.offset);
-    for (const st of r.sets) { st.start += r0.offset; st.end += r0.offset; }
-    r.fps = ACCEL_HZ; r.offset = r0.offset; r.bodySize = 1;
     return r;
   }
 
-  const api = { frameMotion, countSkips, countAccel, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
+
+
+  // Counting by rhythm. Skipping is metronome-steady, so instead of judging every jump on
+  // its own (low hops never get "light enough"), find the stretches where the vertical force
+  // repeats at 60-200 per minute AND looks like skipping, measure the beat there, and count
+  // one skip per beat. What makes a stretch skipping:
+  //  - a steady rhythm (autocorrelation), with the beat taken as the first strong repeat, so a
+  //    second bump per skip (arm swing, double landing) can't double the count;
+  //  - sharp landings (energy above 6 Hz): turning the rope without jumping is smooth;
+  //  - not repeating every two steps (walking: the leg with the phone lands differently);
+  //  - lighter or bigger swings than walking; weaker windows at the same beat only extend
+  //    a stretch, never start one;
+  //  - at least one clearly airborne jump in it (one-by-one detector). When that detector
+  //    sees 80 %+ of the beats, its exact count is used for the stretch.
+  // Simulated (pocket, loose pocket, thigh, armband, low hops, walking between sets):
+  // ~1 % error overall; walking or turning the rope alone count 0.
+  function countAccel(t, a, opts = {}) {
+    if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
+    const G = 9.81, HZ = ACCEL_HZ, { v, offset } = accelVertical(t, a), n = v.length;
+    const fin = r => { r.skipTimes = r.skipTimes.map(x => x + offset); for (const st of r.sets) { st.start += offset; st.end += offset; } r.fps = HZ; r.offset = offset; r.bodySize = 1; return r; };
+    const ev = countAccelEvents(v, opts.engine === "events" ? opts : {});          // clear jumps, grouped into sets
+    if (opts.engine === "events") return fin(ev);
+    const sure = countAccelEvents(v, { minSetSkips: 1, fillGaps: false }).skipTimes; // every clear jump, ungrouped
+
+    const x = filtfilt([biquad(0.8, HZ, "high"), biquad(4, HZ, "low")], Array.from(v)); // the bounce
+    const hf = filtfilt([biquad(6, HZ, "high")], Array.from(v));                          // sharp landings
+    const W = Math.round(3 * HZ), hop = Math.round(0.5 * HZ), Lmin = Math.round(0.28 * HZ), Lmax = Math.round(1.05 * HZ);
+    const lagAt = new Float64Array(n), level = new Uint8Array(n); // 0 no, 1 maybe, 2 skipping
+    for (let i0 = 0; i0 + W <= n; i0 += hop) {
+      const i1 = i0 + W; let mean = 0; for (let i = i0; i < i1; i++) mean += x[i]; mean /= W;
+      const rho = new Float64Array(2 * Lmax + 2); let mx = -1;
+      for (let L = Lmin; L <= Math.min(2 * Lmax + 1, W - 1); L++) {
+        let sum = 0, ea = 0, eb = 0; for (let i = i0; i + L < i1; i++) { const p = x[i] - mean, q = x[i + L] - mean; sum += p * q; ea += p * p; eb += q * q; }
+        rho[L] = sum / Math.sqrt(ea * eb || 1); if (L <= Lmax && rho[L] > mx) mx = rho[L];
+      }
+      let L0 = 0;
+      for (let L = Lmin + 1; L <= Lmax; L++) if (rho[L] >= 0.85 * mx && rho[L] >= rho[L - 1] && rho[L] >= rho[L + 1]) { L0 = L; break; }
+      let eh = 0, el = 0; for (let i = i0; i < i1; i++) { eh += hf[i] ** 2; el += (x[i] - mean) ** 2; }
+      const impact = Math.sqrt(eh / (el || 1)), asym = L0 && 2 * L0 < W - 1 ? rho[2 * L0] - rho[L0] : 0;
+      const vs = Array.from(v.subarray(i0, i1)), p5 = percentile(vs, 5) / G, spread = percentile(vs, 95) - percentile(vs, 5);
+      const rhythmic = mx >= (opts.rhoMin ?? 0.5) && L0 && impact >= (opts.impactMin ?? 0.3) && asym <= (opts.asymMax ?? 0.06);
+      const lv = !rhythmic ? 0 : (p5 < (opts.p5Max ?? 0.75) || spread >= (opts.spreadMin ?? 8)) ? 2 : (p5 < (opts.p5Weak ?? 0.85) || spread >= (opts.spreadWeak ?? 6)) ? 1 : 0;
+      const c0 = i0 + Math.round(W / 2 - hop / 2), c1 = Math.min(n, c0 + hop);
+      const mark = (p, q) => { for (let i = p; i < q; i++) if (lv > level[i]) { level[i] = lv; lagAt[i] = L0 / HZ; } };
+      mark(c0, c1); if (i0 === 0) mark(0, c0); if (i0 + hop + W > n) mark(c1, n);
+    }
+    for (const [s0, e0] of runs(Array.from(level, q => q !== 2))) if (s0 > 0 && e0 < n && e0 - s0 <= 2 * hop) for (let i = s0; i < e0; i++) { level[i] = 2; lagAt[i] = lagAt[s0 - 1]; }
+
+    const beatsIn = (s0, e0) => {
+      const L = median(Array.from(lagAt.subarray(s0, e0)).filter(q => q > 0)) || 0.5;
+      const seg = Array.from(x.subarray(s0, e0), q => -q), fp = findPeaks(seg, Math.max(1, Math.floor(0.6 * L * HZ)));
+      const p75 = percentile(fp.prom, 75) || 1;
+      const beats = fp.peaks.filter((p, k) => seg[p] > 0 && fp.prom[k] > 0.25 * p75).map(p => (p + s0) / HZ);
+      const out = [];
+      for (const b of beats) { const prev = out[out.length - 1]; if (prev != null && b - prev > 1.6 * L) { const k = Math.round((b - prev) / L) - 1; for (let j = 1; j <= k; j++) out.push(prev + j * (b - prev) / (k + 1)); } out.push(b); }
+      return { out, L };
+    };
+    const sets = [], times = []; let beatSum = 0, beatN = 0;
+    const usedEv = new Set();
+    const take = (list, L, st) => { sets.push(st); times.push(...list); beatSum += L * list.length; beatN += list.length; };
+    for (let [s0, e0] of runs(Array.from(level, q => q === 2))) {
+      if ((e0 - s0) / HZ < 1.5) continue;
+      let { out, L } = beatsIn(s0, e0);
+      if (out.length < (opts.minSetSkips ?? 3)) continue;
+      const mine = sure.filter(q => q >= s0 / HZ - 0.3 && q <= e0 / HZ + 0.3);
+      if (mine.length < Math.max(1, (opts.confirm ?? 0.1) * out.length)) continue;   // never once clearly airborne: walking
+      // the one-by-one sets overlapping this stretch (whole sets, so nothing is lost at a seam)
+      const over = ev.sets.map((st, k) => k).filter(k => ev.sets[k].end >= s0 / HZ - 0.5 && ev.sets[k].start <= e0 / HZ + 0.5);
+      const evCount = over.reduce((q, k) => q + ev.sets[k].skips, 0);
+      if (evCount >= (opts.trust ?? 0.8) * out.length) {                            // clear jumps: the exact one-by-one count
+        for (const k of over) if (!usedEv.has(k)) { usedEv.add(k); const st = ev.sets[k]; take(ev.skipTimes.filter(q => q >= st.start && q <= st.end), 1 / (ev.cadenceHz || 2), { ...st }); }
+        continue;
+      }
+      for (const k of over) usedEv.add(k);
+      if (opts.extend !== false) {                                                  // low hops: run on through weaker beats at the same tempo
+        const near = i => level[i] >= 1 && Math.abs(lagAt[i] - L) <= 0.25 * L;
+        while (s0 > 0 && near(s0 - 1)) s0--;
+        while (e0 < n && near(e0)) e0++;
+        out = beatsIn(s0, e0).out;
+      }
+      take(out, L, { start: Math.max(0, out[0] - L / 2), end: Math.min(n / HZ, out[out.length - 1] + L / 2), skips: out.length });
+    }
+    // clear one-by-one sets the rhythm view didn't pick up (e.g. short sets): keep them
+    ev.sets.forEach((st, k) => { if (!usedEv.has(k)) take(ev.skipTimes.filter(q => q >= st.start && q <= st.end), 1 / (ev.cadenceHz || 2), { ...st }); });
+    sets.sort((p, q) => p.start - q.start);
+    times.sort((p, q) => p - q);
+    const skipTimes = times.filter((q, i) => i === 0 || q - times[i - 1] > 0.15); // stretches that grew into each other
+    if (skipTimes.length !== times.length && sets.length) { /* keep set sizes consistent with the total */ let extra = times.length - skipTimes.length; for (let k = sets.length - 1; k >= 0 && extra > 0; k--) { const d = Math.min(extra, sets[k].skips - 1); sets[k].skips -= d; extra -= d; } }
+    const total = n / HZ, jumping = sets.reduce((q, s1) => q + s1.end - s1.start, 0);
+    return fin({ skips: skipTimes.length, skipTimes, sets, jumpingSeconds: jumping, totalSeconds: total, restSeconds: Math.max(0, total - jumping),
+      cadenceHz: beatN ? beatN / beatSum : 2, filtered: ev.filtered, active: ev.active });
+  }
+
+  const api = { frameMotion, countSkips, countAccel, countAccelEvents, accelVertical, calories, metForRate, mifflin, Tracker, _: { findPeaks, filtfilt, biquad, percentile, uniformFilter, median } };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.SkipCore = api;
 })(typeof self !== "undefined" ? self : this);

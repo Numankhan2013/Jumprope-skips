@@ -137,6 +137,56 @@ for (const [name, place, plan, o, truth] of [
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${truth}, sets [${r.sets.map(s => s.skips)}]`);
 }
+// Low, efficient hops (the airborne dip only reaches ~0.4-0.85 g, soft landings, uneven
+// rhythm) and more realistic walking (the leg with the phone lands harder; once-per-stride sway).
+function shallow(plan, seed = 1, o = {}) {
+  const R = rng(seed), t = [], X = [], Y = [], Z = []; let now = 0, truth = 0;
+  const p1 = R() * 6.28, p2 = (R() - .5) * 3.1, c1 = Math.cos(p1), s1 = Math.sin(p1), c2 = Math.cos(p2), s2 = Math.sin(p2);
+  const push = (x, y, z) => { const x1 = c1 * x - s1 * y, y1 = s1 * x + c1 * y, y2 = c2 * y1 - s2 * z, z2 = s2 * y1 + c2 * z; t.push(now); X.push(x1); Y.push(y2); Z.push(z2); now += 1 / ((o.hz || 60) * (0.9 + R() * 0.2)); };
+  const [dipLo, dipHi] = o.dip || [0.4, 0.8];
+  for (const [kind, n, rate] of plan) {
+    if (kind === "jump") {
+      for (let k = 0; k < n; k++) {
+        const T = 60 / rate * (0.85 + R() * 0.3), start = now, end = now + T;           // irregular rhythm
+        const flight = T * (0.22 + R() * 0.12), dip = G * (dipLo + R() * (dipHi - dipLo)), land = G * (1.3 + R() * 0.7);
+        while (now < end) {
+          const ph = now - start; let v;
+          if (ph < flight) v = G - (G - dip) * Math.sin(Math.PI * ph / flight);          // shallow, rounded dip
+          else { const s = ph - flight; v = G + (land - G) * Math.exp(-s / 0.06) * (s < 0.02 ? s / 0.02 : 1) + 1.0 * Math.sin(Math.PI * s / (T - flight)); }
+          push((R() - .5) * 2, v + (R() - .5) * 1.6, (R() - .5) * 2);
+        }
+        truth++;
+      }
+    } else if (kind === "walk") { const end = now + n; while (now < end) { const ph = (now * 1.9) % 1; push((R() - .5), G + (ph < .12 ? 6 * Math.sin(ph / .12 * Math.PI) : 0) - 1.5 * Math.sin(2 * Math.PI * ph) + (R() - .5) * 2, (R() - .5)); } }
+    else { const end = now + n; while (now < end) push((R() - .5), G + (R() - .5), (R() - .5)); }
+  }
+  return { t, xyz: { x: X, y: Y, z: Z }, truth };
+}
+function walk2(secs, seed = 1, o = {}) {
+  const R = rng(seed), t = [], X = [], Y = [], Z = []; let now = 0;
+  const p1 = R() * 6.28, c1 = Math.cos(p1), s1 = Math.sin(p1), step = o.step || (1.75 + R() * 0.3);
+  const push = (x, y, z) => { t.push(now); X.push(c1 * x - s1 * y); Y.push(s1 * x + c1 * y); Z.push(z); now += 1 / (60 * (0.9 + R() * 0.2)); };
+  while (now < secs) {
+    const k = Math.floor(now * step), ph = now * step - k, near = k % 2 === 0, heel = (near ? 6 + R() : 2.5 + R()) * (o.hard || 1);
+    let vert = G + (ph < 0.12 ? heel * Math.sin(ph / 0.12 * Math.PI) : 0) - 1.6 * Math.sin(2 * Math.PI * ph) + (R() - .5) * 1.5;
+    const swing = o.place === "arm" ? 3.5 : 2.5, fwd = swing * Math.sin(Math.PI * now * step); // once per stride
+    push(fwd + (R() - .5), vert, (o.place === "thigh" ? 2 : 0.8) * Math.cos(Math.PI * now * step) + (R() - .5));
+  }
+  return { t, xyz: { x: X, y: Y, z: Z }, truth: 0 };
+}
+const join = (...ws) => { const o = { t: [], xyz: { x: [], y: [], z: [] } }; let off = 0; for (const w of ws) { o.t.push(...w.t.map(q => q + off)); for (const k of "xyz") o.xyz[k].push(...w.xyz[k]); off = o.t[o.t.length - 1] + 0.02; } return o; };
+for (const [name, mk, truth, tol] of [
+  ["low hops, 80 + pause + 70", s => shallow([["rest", 3], ["jump", 80, 150], ["rest", 4], ["jump", 70, 150], ["rest", 3]], s), 150, 2],
+  ["lower hops (0.55-0.85 g)", s => shallow([["rest", 3], ["jump", 150, 150], ["rest", 3]], s, { dip: [0.55, 0.85] }), 150, 30],
+  ["low hops, walking between sets", s => join(shallow([["rest", 3], ["jump", 60, 150]], s), walk2(6, s), shallow([["jump", 50, 140], ["rest", 3]], s + 9)), 110, 4],
+  ["walking (pocket)", s => walk2(40, s), 0, 0],
+  ["walking (thigh)", s => walk2(40, s, { place: "thigh" }), 0, 0],
+  ["walking (armband)", s => walk2(40, s, { place: "arm" }), 0, 0],
+]) for (const seed of [1, 2, 3]) {
+  const w = mk(seed), r = core.countAccel(w.t, w.xyz), pass = Math.abs(r.skips - truth) <= tol;
+  ok &&= pass;
+  console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${truth}, sets [${r.sets.map(s => s.skips)}]`);
+}
 // a long session: 40 minutes, ~5,000 skips with rests
 const plan = []; for (let i = 0; i < 25; i++) plan.push(["jump", 200, 115 + (i % 4) * 8], ["rest", 25 + (i % 3) * 10], ...(i % 5 === 4 ? [["walk", 8]] : []));
 const w = workout(plan, 7), t0 = Date.now(), r = core.countAccel(w.t, w.a);

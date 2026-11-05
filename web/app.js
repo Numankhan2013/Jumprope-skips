@@ -431,11 +431,19 @@ function pocketTick() {
   if (pk.paused) return;
   if (document.visibilityState !== "visible") { $("pocketState").textContent = "Screen off"; return; }
   if (pk.t.length < 200) return;
+  // Recount the whole session, but less often as it grows (a 45-minute session takes about a
+  // second to count on a phone): wait at least 3x as long as the last count took.
+  const now = performance.now();
+  if (now < (pk.nextCount || 0)) return;
   try {
-    const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z }); pk.count = r.skips;
-    $("pocketCount").textContent = fmtInt(r.skips); pocketGoalPaint();
+    const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z });
+    pk.nextCount = performance.now() + 3 * (performance.now() - now);
+    // the live number never goes backwards (the newest second or two is still being settled);
+    // the final count when you finish is always the full analysis
+    pk.count = Math.max(pk.count, r.skips);
+    $("pocketCount").textContent = fmtInt(pk.count); pocketGoalPaint();
     const every = cueCfg().every;
-    if (every > 0 && Math.floor(r.skips / every) > pk.lastSaid) { pk.lastSaid = Math.floor(r.skips / every); cue("mark", pk.lastSaid * every); }
+    if (every > 0 && Math.floor(pk.count / every) > pk.lastSaid) { pk.lastSaid = Math.floor(pk.count / every); cue("mark", pk.lastSaid * every); }
   } catch {}
 }
 // 3) pause / resume: paused time is cut out, so it doesn't count as rest
