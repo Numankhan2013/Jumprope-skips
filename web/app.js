@@ -651,7 +651,22 @@ async function keepRecording(rec) {
   paintRecCount();
   return key;
 }
-async function paintRecCount() { const list = (await SkipEngine.idb.get("pocket-recs")) || []; $("pocketAllBtn").textContent = `Save all recordings (${list.length})`; $("pocketAllBtn").disabled = !list.length; }
+// Recordings saved by older versions (only the latest session, as "pocket-last") and an
+// unfinished session's checkpoint join the list, so "Save all" includes everything there is.
+async function migrateRecordings() {
+  const list = (await SkipEngine.idb.get("pocket-recs")) || [], have = new Set(list.map(i => i.started));
+  for (const k of ["pocket-last", PK_KEY]) {
+    const r = await SkipEngine.idb.get(k);
+    if (r && r.t && r.t.length && !have.has(r.started)) { const key = `pocket-rec-${r.started}`; await SkipEngine.idb.put(key, r); list.push({ key, started: r.started }); have.add(r.started); }
+  }
+  list.sort((a, b) => a.started - b.started);
+  while (list.length > REC_KEEP) { const old = list.shift(); await SkipEngine.idb.del(old.key); }
+  await SkipEngine.idb.put("pocket-recs", list);
+}
+async function paintRecCount() {
+  const n = ((await SkipEngine.idb.get("pocket-recs")) || []).length;
+  $("pocketAllBtn").textContent = n ? `Save all recordings (${n})` : "No recordings yet"; $("pocketAllBtn").disabled = !n;
+}
 async function finishPocketSession() {
   const P = teardownPocket(); closePocketScreen(); if (!P) return;
   haptic(30);
@@ -1020,7 +1035,8 @@ $("selfCountSave").onclick = async () => {
   rec.selfCount = v; await SkipEngine.idb.put(lastRecKey, rec);
   $("selfCountRow").hidden = true; toast(`Noted: you counted ${fmtInt(v)}. It's saved with this session's recording.`);
 };
-paintRecCount();
+migrateRecordings().then(paintRecCount);
+$("profileBtn").addEventListener("click", () => paintRecCount()); // fresh number each time the profile opens
 
 // ================================================================ install as an app
 // Chrome/Edge/Android: offer the real install prompt. iPhone/iPad: explain Share > Add to Home Screen.
