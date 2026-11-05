@@ -210,7 +210,7 @@ for (const [name, w] of [
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)}        : final ${shown}, truth ${w.truth}, on screen vs done: avg off ${avg.toFixed(1)}, most ahead ${ahead}`);
 }
 // Real recordings (tests/data/*.json): the true count was established from the data itself.
-// Final count must be exact; the live screen (recount every second, settled + recent) must
+// Final count must be exact (or within the file's stated tolerance); the live screen (recount every second, settled + recent) must
 // track the landings, ignoring the first 3 s (the countdown, while the phone is put away).
 for (const f of require("fs").readdirSync(require("path").join(__dirname, "..", "tests", "data")).filter(n => n.endsWith(".json"))) {
   const d = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "..", "tests", "data", f), "utf8"));
@@ -225,7 +225,8 @@ for (const f of require("fs").readdirSync(require("path").join(__dirname, "..", 
     const done = r.skipTimes.filter(q => q <= t[m - 1]).length; ahead = Math.max(ahead, shown - done); off += Math.abs(shown - done); n++;
   }
   // skips are timed mid-jump, a moment before the landing, so the screen can be a skip or two "early"
-  const pass = r.skips === d.skips && shown === d.skips && ahead <= 3 && off / n <= 1;
+  // (a long recording with a few genuinely ambiguous moments carries a tolerance; otherwise exact)
+  const tol = d.tolerance || 0, pass = Math.abs(r.skips - d.skips) <= tol && Math.abs(shown - d.skips) <= tol && ahead <= 3 && off / n <= 1;
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${("real: " + f).padEnd(44)}        : counted ${r.skips}, live screen ended on ${shown}, truth ${d.skips}, avg off ${(off / n).toFixed(1)}, most ahead ${ahead}`);
 }

@@ -1109,24 +1109,59 @@ details.card[open] > summary::after { content: "–"; }
       if (mn < partLight) merged.push({ a: i - 2, b: i - 1, at: i - 2, lo: mn, jolt: true });
     }
     merged.sort((p, q) => p.at - q.at);
+    // how hard the landing right after each light moment was (null: the recording ends first)
+    const after = Math.round(0.3 * ACCEL_HZ);
+    for (const e of merged) {
+      const from = e.b, to = from + after;
+      if (to >= n) { e.land = null; continue; }
+      let m = -Infinity; for (let i = from; i < to; i++) if (v[i] > m) m = v[i]; // raw: a landing is a 0.05-0.1 s spike
+      e.land = m - G;
+    }
 
     // sets: jumps in a steady rhythm; a pause of more than ~1.7 beats (or 1.2 s) ends a set
     const times = merged.map(e => e.at / ACCEL_HZ), gaps = [];
+    const landAt = new Map(merged.map(e => [e.at / ACCEL_HZ, e.land]));
+    const allL = merged.map(e => e.land).filter(q => q != null).sort((p, q) => p - q), allTyp = allL.length ? allL[Math.floor(allL.length / 2)] : 0;
     for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] < 1.2) gaps.push(times[i] - times[i - 1]);
     const beat = gaps.length >= 3 ? median(gaps) : 0.5, maxGap = Math.max(1.0, 2.6 * beat);
     const minSet = opts.minSetSkips ?? 3, sets = [], skipTimes = [];
-    let cur = [], filled = 0;
+    let cur = [], filled = 0, keep2 = false;
     const close = () => {
-      if (cur.length >= minSet) {
+      // Set edges: a light moment with no real landing after it isn't a skip. After the last
+      // landing of a set the phone rebounds in the pocket (a light moment, then you just stand),
+      // and shuffling into position before a set does much the same. A real recording: 25 of
+      // 25 sets had one such extra at the end, all landing at <2.5 g vs 6-8 g for the set's
+      // skips. Soft landings in the middle of a set are left alone (the rhythm says they're real).
+      if (cur.length && opts.trimEdges !== false) {
+        const ex = cur.map(q => landAt.get(q)).filter(q => q != null).sort((p, q) => p - q);
+        // typical landing: this set's, or the session's if this "set" is a few shuffles
+        const typ = Math.max(ex.length ? ex[Math.floor(ex.length / 2)] : 0, allTyp);
+        const weak = q => { const l = landAt.get(q); return l != null && l < 0.4 * typ && l < 1.5 * G; }; // real landings: 2.6 g and up
+        const was = cur.length;
+        while (cur.length && weak(cur[cur.length - 1])) {
+          const q = cur.pop(), prev = cur[cur.length - 1];
+          // two beats after the last skip: a jump landed in between (its light moment was missed)
+          // and this is the rebound from that landing. Count that jump, not the rebound.
+          if (prev != null && q - prev > 1.6 * beat && q - prev < 2.6 * beat) { cur.push(q - beat / 2); break; }
+        }
+        while (cur.length && weak(cur[0])) cur.shift();
+        if (was >= minSet && cur.length === 2) keep2 = true; // a restart that stopped after two real jumps
+      }
+      // skipping is steady: a two-beat gap inside a set is one jump the sensor missed
+      // (filled only now, between the set's real first and last jumps)
+      if (opts.fillGaps !== false) {
+        const out = [];
+        for (const q of cur) { const prev = out[out.length - 1]; if (prev != null && q - prev > 1.6 * beat) { out.push((prev + q) / 2); filled++; } out.push(q); }
+        cur = out;
+      }
+      if (cur.length >= minSet || keep2) {
         sets.push({ start: Math.max(0, cur[0] - beat / 2), end: Math.min(n / ACCEL_HZ, cur[cur.length - 1] + beat / 2), skips: cur.length });
         skipTimes.push(...cur);
       }
-      cur = [];
+      cur = []; keep2 = false;
     };
     for (const t1 of times) {
-      const prev = cur[cur.length - 1];
-      if (cur.length && t1 - prev > maxGap) close();
-      else if (cur.length && t1 - prev > 1.6 * beat && opts.fillGaps !== false) { cur.push((prev + t1) / 2); filled++; } // skipping is steady: a two-beat gap inside a set is one jump the sensor missed
+      if (cur.length && t1 - cur[cur.length - 1] > maxGap) close();
       cur.push(t1);
     }
     close();
@@ -1161,7 +1196,7 @@ details.card[open] > summary::after { content: "–"; }
     // amplitude of signal x at frequency f (Hz) over [i0, i1)
     const amp = (x, i0, i1, f) => { let re = 0, im = 0; for (let i = i0; i < i1; i++) { const ph = 2 * Math.PI * f * i / HZ; re += x[i] * Math.cos(ph); im -= x[i] * Math.sin(ph); } return 2 * Math.hypot(re, im) / (i1 - i0); };
     const fin = r => { r.skipTimes = r.skipTimes.map(x => x + offset); for (const st of r.sets) { st.start += offset; st.end += offset; } r.fps = HZ; r.offset = offset; r.bodySize = 1; return r; };
-    const ev = countAccelEvents(v, opts.engine === "events" ? opts : {});          // clear jumps, grouped into sets
+    const ev = countAccelEvents(v, opts.engine === "events" ? opts : { trimEdges: opts.trimEdges });          // clear jumps, grouped into sets
     if (opts.engine === "events") return fin(ev);
     const sure = countAccelEvents(v, { minSetSkips: 1, fillGaps: false }).skipTimes; // every clear jump, ungrouped
 
@@ -1202,7 +1237,7 @@ details.card[open] > summary::after { content: "–"; }
       const p75 = percentile(fp.prom, 75) || 1;
       const beats = fp.peaks.filter((p, k) => seg[p] > 0 && fp.prom[k] > 0.25 * p75).map(p => (p + s0) / HZ);
       const out = [];
-      for (const b of beats) { const prev = out[out.length - 1]; if (prev != null && b - prev > 1.6 * L) { const k = Math.round((b - prev) / L) - 1; for (let j = 1; j <= k; j++) out.push(prev + j * (b - prev) / (k + 1)); } out.push(b); }
+      for (const b of beats) { const prev = out[out.length - 1]; if (prev != null && b - prev > 1.6 * L && b - prev < (opts.fillMax ?? 3.6) * L) { /* a beat or two smeared out; longer is a rest */ const k = Math.round((b - prev) / L) - 1; for (let j = 1; j <= k; j++) out.push(prev + j * (b - prev) / (k + 1)); } out.push(b); }
       return { out, L };
     };
     const sets = [], times = []; let beatSum = 0, beatN = 0;
