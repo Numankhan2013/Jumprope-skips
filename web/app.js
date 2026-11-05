@@ -247,7 +247,8 @@ async function startLive() {
   try { await v.play(); } catch {}
   const pool = await SkipEngine.Pool.create();
   const track = stream.getVideoTracks()[0];
-  live = { stream, pool, stop: false, started: performance.now(), lock: wakeLock(), dropped: 0 };
+  audioReady();
+  live = { stream, pool, stop: false, started: performance.now(), lock: wakeLock(), dropped: 0, lastSaid: 0, count: 0 };
   // the camera stops when the screen goes off: finish and save what was counted rather than lose it
   live.onHide = () => { if (document.visibilityState === "hidden" && live && !live.stop) stopLive(); };
   document.addEventListener("visibilitychange", live.onHide);
@@ -278,7 +279,10 @@ async function startLive() {
   live.timer = setInterval(() => {
     $("liveTime").textContent = fmtTime((performance.now() - live.started) / 1000);
     if (pool.tracker && pool.tracker.ts.length > 90) {
-      try { const r = SkipEngine.countFrom(pool.tracker); $("liveCount").textContent = fmtInt(r.skips); } catch {}
+      try {
+        const r = SkipEngine.countFrom(pool.tracker); live.count = Math.max(live.count || 0, r.skips); $("liveCount").textContent = fmtInt(live.count);
+        announceMilestones(live, live.count, r.skipTimes, r.offset || 0, (performance.now() - live.started) / 1000);
+      } catch {}
     }
   }, 1500);
 }
@@ -307,20 +311,36 @@ async function stopLive() {
 let pk = null;
 const PK_KEY = "pocket-current";
 // ---- sound cues: settings live in the (synced) profile
-const CUE_DEFAULT = { every: 500, style: "beep", goal: true };
-const cueCfg = () => ({ ...CUE_DEFAULT, ...(prof().cues || {}) });
-function setCues(patch) { setProf({ cues: { ...cueCfg(), ...patch } }); paintCues(); }
-let actx = null;
+// style "voice": recorded words stitched into sentences, played through Web Audio so they mix
+// with music (like a sound effect) instead of pausing it the way the phone's text-to-speech does.
+const CUE_DEFAULT = { every: 500, style: "voice", goal: true, split: true, total: false };
+const cueCfg = () => {
+  const c = { ...CUE_DEFAULT, ...(prof().cues || {}) };
+  if (!prof().cues?.v) c.style = "voice"; // settings from before the recorded voice existed: switch to it
+  return c;
+};
+function setCues(patch) { setProf({ cues: { ...cueCfg(), ...patch, v: 2 } }); paintCues(); }
+let actx = null, voice = null, voiceLoading = null, speakUntil = 0;
 // Must run inside a tap (iPhone only allows sound that a tap started).
 function audioReady() {
   // "ambient": mix with Spotify etc. instead of pausing it (Safari 16.4+; others ignore it)
   try { if (navigator.audioSession) navigator.audioSession.type = "ambient"; } catch {}
   try { if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } actx?.resume?.(); } catch {}
-  if (cueCfg().style === "voice" && "speechSynthesis" in window) { try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch {} }
+  loadVoice();
+}
+function loadVoice() {
+  if (voice || voiceLoading || !actx) return voiceLoading;
+  voiceLoading = (async () => {
+    const idx = await (await fetch("voice/voice.json")).json();
+    const buf = await (await fetch(idx.file)).arrayBuffer();
+    const audio = await new Promise((res, rej) => { const p = actx.decodeAudioData(buf, res, rej); if (p && p.then) p.then(res, rej); });
+    voice = { audio, words: idx.words };
+  })().catch(e => { console.warn("Voice pack unavailable, using beeps:", e); voiceLoading = null; });
+  return voiceLoading;
 }
 function beep(notes) { // [[frequency Hz, length ms], ...]
   if (!actx) return;
-  let t = actx.currentTime + 0.03;
+  let t = Math.max(actx.currentTime + 0.03, speakUntil);
   for (const [f, ms] of notes) {
     const o = actx.createOscillator(), g = actx.createGain(), d = ms / 1000;
     o.type = "sine"; o.frequency.value = f;
@@ -328,24 +348,74 @@ function beep(notes) { // [[frequency Hz, length ms], ...]
     o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + d + 0.02);
     t += d + 0.08;
   }
+  speakUntil = t;
 }
-function cue(kind, n) { // kind: "mark" (every N) or "goal"
-  const c = cueCfg();
-  if (c.style === "voice" && "speechSynthesis" in window) {
-    try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(kind === "goal" ? `Goal reached. ${n} skips today.` : String(n))); } catch {}
-    return;
+// numbers and times as the recorded words
+function numberWords(n) {
+  n = Math.round(n); const ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"], TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+  const under1000 = m => { const w = []; if (m >= 100) { w.push(ONES[Math.floor(m / 100)], "hundred"); m %= 100; } if (m >= 20) { w.push(TENS[Math.floor(m / 10)]); m %= 10; if (m) w.push(ONES[m]); } else if (m || !w.length) w.push(ONES[m]); return w; };
+  if (n < 1000) return under1000(n);
+  const th = Math.floor(n / 1000), rest = n % 1000;
+  return [...under1000(th), "thousand", ...(rest ? under1000(rest) : [])];
+}
+function timeWords(sec) {
+  sec = Math.max(1, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s2 = sec % 60, w = [];
+  if (h) w.push(...numberWords(h), h === 1 ? "hour" : "hours");
+  if (m) w.push(...numberWords(m), m === 1 ? "minute" : "minutes");
+  if (s2 || !w.length) w.push(...numberWords(s2), s2 === 1 ? "second" : "seconds");
+  return w;
+}
+// play a list of words ("|" = the pause between sentences) after anything already playing
+function say(words) {
+  if (!voice || !actx) return false;
+  let t = Math.max(actx.currentTime + 0.05, speakUntil);
+  for (const w of words) {
+    if (w === "|") { t += 0.28; continue; }
+    const seg = voice.words[w]; if (!seg) continue;
+    const src = actx.createBufferSource(), g = actx.createGain();
+    src.buffer = voice.audio; g.gain.value = 1.0; src.connect(g); g.connect(actx.destination);
+    src.start(t, seg[0], seg[1]); t += seg[1] + 0.035;
   }
+  speakUntil = t; return true;
+}
+const sentence = (k, n, o = {}) => {
+  const c = cueCfg();
+  if (k === "goal") return ["goal reached", "|", ...numberWords(n), "skips today"];
+  const w = [...numberWords(n), n === 1 ? "skip" : "skips"];
+  if (c.split && o.split) w.push("|", "last", ...numberWords(o.block), "in", ...timeWords(o.split));
+  if (c.total && o.total) w.push("|", "total time", ...timeWords(o.total));
+  return w;
+};
+// kind "mark": n = total so far, o = { block, split (s), total (s) }; kind "goal": n = today's total
+function cue(kind, n, o = {}) {
+  const c = cueCfg();
+  if (c.style === "voice" && say(sentence(kind, n, o))) return;
   beep(kind === "goal" ? [[660, 130], [880, 130], [1175, 300]] : [[988, 110], [988, 110]]);
 }
+// Milestones in a session: called after each recount. times = when each skip happened (s).
+function announceMilestones(st, count, times, startT, activeS) {
+  const every = cueCfg().every; if (!(every > 0)) return;
+  const k = Math.floor(count / every); if (k <= st.lastSaid) return;
+  const n = k * every;
+  // first block: from your first skip (minus one beat), not from pressing Start
+  const firstT = times.length > 1 ? times[0] - (times[1] - times[0]) : startT;
+  const tN = times[n - 1] ?? times[times.length - 1], tPrev = k > 1 ? (times[(k - 1) * every - 1] ?? st.lastMarkT) : firstT;
+  const split = tN != null && tPrev != null ? tN - tPrev : null;
+  st.lastSaid = k; st.lastMarkT = tN;
+  cue("mark", n, { block: every, split: split > 0 ? split : null, total: activeS });
+}
+const cueExample = c => { const n = (c.every || 100) * 2; let e = `${fmtInt(n)} skips.`; if (c.split) e += ` Last ${fmtInt(c.every || 100)} in 48 seconds.`; if (c.total) e += " Total time 1 minute 40 seconds."; return e; };
 const cueLabel = c => !c.every ? "Off" : `Every ${fmtInt(c.every)}${c.style === "voice" ? " (voice)" : ""}`;
 function paintCues() {
   const c = cueCfg(), presets = [0, 100, 250, 500, 1000];
   $("cueEvery").value = presets.includes(c.every) ? String(c.every) : "custom";
   $("cueCustomWrap").hidden = presets.includes(c.every); if (!presets.includes(c.every)) $("cueCustom").value = c.every;
   (c.style === "voice" ? $("cueVoice") : $("cueBeep")).checked = true; $("cueGoal").checked = !!c.goal;
+  $("cueSplit").checked = !!c.split; $("cueTotal").checked = !!c.total;
+  $("cueSplitRow").hidden = $("cueTotalRow").hidden = c.style !== "voice";
   $("cueHint").textContent = c.style === "voice"
-    ? "The voice says the number. Your phone may lower or briefly pause your music while it speaks; choose Beeps to keep the music going."
-    : "Beeps play over your music (Spotify and so on) without pausing it. On iPhone they follow the silent switch.";
+    ? `Spoken over your music without pausing it, e.g. "${cueExample(c)}". On iPhone, the silent switch mutes it.`
+    : "Beeps play over your music without pausing it. On iPhone they follow the silent switch.";
   // pocket screen picker
   const sel = $("pocketCue"), opts = [...new Set([...presets, c.every])].sort((a, b) => a - b);
   sel.innerHTML = opts.map(v => `<option value="${v}">${v ? `Every ${fmtInt(v)}` : "Off"}</option>`).join("");
@@ -441,9 +511,9 @@ function pocketTick() {
     // the live number never goes backwards (the newest second or two is still being settled);
     // the final count when you finish is always the full analysis
     pk.count = Math.max(pk.count, r.skips);
-    $("pocketCount").textContent = fmtInt(pk.count); pocketGoalPaint();
-    const every = cueCfg().every;
-    if (every > 0 && Math.floor(pk.count / every) > pk.lastSaid) { pk.lastSaid = Math.floor(pk.count / every); cue("mark", pk.lastSaid * every); }
+    $("pocketCount").textContent = fmtInt(pk.count);
+    announceMilestones(pk, pk.count, r.skipTimes, pk.t[0], activeSeconds());
+    pocketGoalPaint(); // after the milestone, so "200 skips…" comes before "Goal reached"
   } catch {}
 }
 // 3) pause / resume: paused time is cut out, so it doesn't count as rest
@@ -864,7 +934,13 @@ $("cueEvery").addEventListener("change", e => {
 $("cueCustom").addEventListener("change", e => { const v = Math.round(+e.target.value); if (v >= 10) { setCues({ every: v }); toast(`Sound cue: ${cueLabel(cueCfg())}`); } });
 document.querySelectorAll('input[name="cueStyle"]').forEach(r => r.addEventListener("change", () => { setCues({ style: r.value }); audioReady(); }));
 $("cueGoal").addEventListener("change", e => setCues({ goal: e.target.checked }));
-$("cueTest").addEventListener("click", () => { audioReady(); cue("mark", cueCfg().every || 100); });
+$("cueTest").addEventListener("click", async () => {
+  audioReady(); await loadVoice();
+  const c = cueCfg(), every = c.every || 100;
+  cue("mark", every * 2, { block: every, split: 48, total: 100 });
+});
+$("cueSplit").addEventListener("change", e => setCues({ split: e.target.checked }));
+$("cueTotal").addEventListener("change", e => setCues({ total: e.target.checked }));
 $("pocketCue").addEventListener("change", e => { setCues({ every: +e.target.value }); audioReady(); });
 paintCues();
 $("liveStop").addEventListener("click", stopLive);

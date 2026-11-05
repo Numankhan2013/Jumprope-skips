@@ -559,11 +559,13 @@ details.card[open] > summary::after { content: "–"; }
         <label class="f" for="cueCustom" id="cueCustomWrap" hidden>Every how many skips<input id="cueCustom" type="number" inputmode="numeric" min="10" step="10" placeholder="e.g. 300"></label>
         <div class="f">Sound
           <div class="seg2" role="radiogroup" aria-label="Cue sound">
-            <label><input type="radio" name="cueStyle" id="cueBeep" value="beep" checked>Beeps</label>
-            <label><input type="radio" name="cueStyle" id="cueVoice" value="voice">Voice</label>
+            <label><input type="radio" name="cueStyle" id="cueVoice" value="voice" checked>Voice</label>
+            <label><input type="radio" name="cueStyle" id="cueBeep" value="beep">Beeps</label>
           </div>
         </div>
       </div>
+      <label class="check" id="cueSplitRow" for="cueSplit"><input type="checkbox" id="cueSplit" checked> Say how long the last block took</label>
+      <label class="check" id="cueTotalRow" for="cueTotal"><input type="checkbox" id="cueTotal"> Say the total time</label>
       <label class="check" for="cueGoal"><input type="checkbox" id="cueGoal" checked> Also when I reach today's goal</label>
       <p class="hint" style="margin:0" id="cueHint">Beeps play over your music (Spotify and so on) without pausing it. On iPhone they follow the silent switch.</p>
       <div class="row-actions"><button class="btn btn-ghost btn-small" id="cueTest" type="button">Play a test cue</button></div>
