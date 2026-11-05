@@ -424,9 +424,10 @@ function paintCues() {
 }
 function pocketState(st) {
   $("pocket").dataset.state = st;
-  $("pocketState").textContent = { ready: "Ready", counting: "Counting", paused: "Paused" }[st];
-  $("pocketLabel").textContent = st === "ready" ? "skips so far today" : "skips this session";
-  $("pocketHint").textContent = st === "ready" ? "Press Start, then put the phone in a pocket, armband or thigh strap, any way round, without locking it. The screen stays on and black; if it turns off, nothing is counted."
+  $("pocketState").textContent = { ready: "Ready", countdown: "Get ready", counting: "Counting", paused: "Paused" }[st];
+  $("pocketLabel").textContent = st === "ready" ? "skips so far today" : st === "countdown" ? "put the phone away" : "skips this session";
+  $("pocketHint").textContent = st === "ready" ? "Press Start, then put the phone in a pocket, armband or thigh strap during the 3-second countdown, without locking it. The screen stays on and black."
+    : st === "countdown" ? "Counting starts at the high beep."
     : st === "counting" ? "Don't lock the phone. The bar above should jump with every skip. To pause, press and hold the button."
     : "Paused. Nothing is being counted.";
 }
@@ -453,10 +454,10 @@ async function startPocket() {
   } catch { closePocketScreen(); showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
   audioReady(); // this tap unlocks sound on iPhone
   pk = { t: [], x: [], y: [], z: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
-    shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
+    shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, countdown: true, goalHit: todaySkips() >= goal(),
     hiddenMs: 0, hiddenAt: null, hides: 0, ticks: 0, committed: [], lastCommitT: -Infinity, noGravity: 0, level: 0, peak: 0 };
   pk.onMotion = e => {
-    if (pk.paused) return;
+    if (pk.paused || pk.countdown) return; // nothing before "go": that's you putting the phone away
     const g = e.accelerationIncludingGravity;
     if (!g || g.x == null) { pk.noGravity++; return; }
     const m = Math.hypot(g.x, g.y, g.z);
@@ -480,10 +481,22 @@ async function startPocket() {
     pk.meterRaf = requestAnimationFrame(meter);
   });
   pk.lock.ready.then(() => setTimeout(checkAwake, 800));
-  $("pocketCount").textContent = "0"; pocketState("counting"); pocketGoalPaint(); haptic(20);
+  // 3-2-1 countdown: put the phone away while it runs. In a real recording, pocketing the phone
+  // right after Start made a few bumps that looked like quick skips.
+  pocketState("countdown"); const P = pk;
+  for (let k = 3; k >= 1; k--) {
+    if (pk !== P) return; // cancelled
+    $("pocketCount").textContent = String(k); beep([[740, 120]]); haptic(25);
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  if (pk !== P) return;
+  beep([[1175, 260]]); haptic(60);
+  pk.countdown = false; pk.runFrom = performance.now(); pk.started = Date.now();
+  $("pocketCount").textContent = "0"; pocketState("counting"); pocketGoalPaint();
   pk.timer = setInterval(pocketTick, 1000);
+  setTimeout(() => { if (pk && !pk.gotData && !pk.paused && !pk.countdown) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Pause and discard, then use the camera or a video instead."; } }, 2500);
   pk.saver = setInterval(() => pk && SkipEngine.idb.put(PK_KEY, packMotion(pk)), 10000);
-  setTimeout(() => { if (pk && !pk.gotData && !pk.paused) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Pause and discard, then use the camera or a video instead."; } }, 2500);
+
 }
 // Is something keeping the screen on? (wake lock, or the silent-video fallback)
 function checkAwake() {
@@ -626,7 +639,10 @@ $("pocketStart").onclick = startPocket;
 $("pocketResume").onclick = resumePocket;
 $("pocketFinish").onclick = finishPocketSession;
 $("pocketDiscard").onclick = discardPocket;
-$("pocketCancel").onclick = () => { if (pk && !pk.paused) return; if (pk) pausePocket(); else closePocketScreen(); };
+$("pocketCancel").onclick = () => {
+  if (pk && pk.countdown) { teardownPocket(); closePocketScreen(); return; } // changed your mind during 3-2-1
+  if (pk && !pk.paused) return; if (pk) pausePocket(); else closePocketScreen();
+};
 // today's goal, right before you start
 $("pocketGoalBtn").onclick = () => { if (pk && !pk.paused) return; const i = $("pocketGoalInput"); i.value = goal(); i.hidden = false; $("pocketGoalBtn").parentElement.hidden = true; i.focus(); i.select(); };
 const pocketGoalSet = () => {

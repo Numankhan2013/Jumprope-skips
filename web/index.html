@@ -147,6 +147,7 @@ details.tips b { color: var(--ink); }
 .pocket-top { width: 100%; display: flex; align-items: center; justify-content: space-between; color: rgba(255,255,255,.7); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .pocket-x { width: 40px; height: 40px; border-radius: 99px; background: rgba(255,255,255,.08); color: #fff; font-size: 1rem; }
 .pocket[data-state="counting"] .pocket-x { visibility: hidden; }
+.pocket[data-state="countdown"] .meter, .pocket[data-state="countdown"] .pocket-goal { visibility: hidden; }
 .pocket-clock { display: inline-flex; align-items: center; }
 .pocket[data-state="ready"] .pocket-clock { visibility: hidden; }
 .pocket[data-state="paused"] .rec { animation: none; background: #888; }

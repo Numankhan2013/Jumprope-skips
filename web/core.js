@@ -391,7 +391,12 @@
     const merged = [];
     for (const e of air) {
       const last = merged[merged.length - 1];
-      if (last && (e.a - last.b) / ACCEL_HZ < 0.18) { last.b = e.b; if (e.lo < last.lo) { last.lo = e.lo; last.at = e.at; } }
+      // ...but only if nothing like a landing happened in between. (A real recording: landings
+      // are 0.08 s spikes of 6-8 g between long light stretches; merging across them turned a
+      // whole set into one "jump".) A mid-air bump against fabric stays well under 1.3 g.
+      let landed = false;
+      if (last) for (let i = last.b; i <= e.a; i++) if (sm[i] > 1.3 * G) { landed = true; break; }
+      if (last && !landed && (e.a - last.b) / ACCEL_HZ < 0.18) { last.b = e.b; if (e.lo < last.lo) { last.lo = e.lo; last.at = e.at; } }
       else merged.push({ ...e });
     }
     // Second witness, for armbands: the landing jolt. On an arm, the rope-turning swing pushes
