@@ -583,6 +583,7 @@ details.card[open] > summary::after { content: "–"; }
       <label class="check" id="cueSplitRow" for="cueSplit"><input type="checkbox" id="cueSplit" checked> Say how long the last block took</label>
       <label class="check" id="cueTotalRow" for="cueTotal"><input type="checkbox" id="cueTotal"> Say the total time</label>
       <label class="check" for="cueGoal"><input type="checkbox" id="cueGoal" checked> Also when I reach today's goal</label>
+      <label class="check" for="cueDuck"><input type="checkbox" id="cueDuck" checked> Lower my music while a cue plays</label>
       <p class="hint" style="margin:0" id="cueHint">Beeps play over your music (Spotify and so on) without pausing it. On iPhone they follow the silent switch.</p>
       <div class="row-actions"><button class="btn btn-ghost btn-small" id="cueTest" type="button">Play a test cue</button></div>
     </div>
@@ -2230,7 +2231,7 @@ const SETTLE_S = 4; // seconds before a skip is locked in (it can no longer be c
 // ---- sound cues: settings live in the (synced) profile
 // style "voice": recorded words stitched into sentences, played through Web Audio so they mix
 // with music (like a sound effect) instead of pausing it the way the phone's text-to-speech does.
-const CUE_DEFAULT = { every: 500, style: "voice", goal: true, split: true, total: false };
+const CUE_DEFAULT = { every: 500, style: "voice", goal: true, split: true, total: false, duck: true };
 const cueCfg = () => {
   const c = { ...CUE_DEFAULT, ...(prof().cues || {}) };
   if (!prof().cues?.v) c.style = "voice"; // settings from before the recorded voice existed: switch to it
@@ -2240,6 +2241,8 @@ function setCues(patch) { setProf({ cues: { ...cueCfg(), ...patch, v: 2 } }); pa
 let actx = null, voice = null, voiceLoading = null, speakUntil = 0;
 // Must run inside a tap (iPhone only allows sound that a tap started).
 function audioReady() {
+  // unlock <audio> playback inside this tap (a silent clip), for the music-lowering cues
+  try { if (!window.__audioUnlocked) { const a = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA="); a.volume = 0; a.play().catch(() => {}); window.__audioUnlocked = true; } } catch {}
   // "ambient": mix with Spotify etc. instead of pausing it (Safari 16.4+; others ignore it)
   try { if (navigator.audioSession) navigator.audioSession.type = "ambient"; } catch {}
   try { if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } actx?.resume?.(); } catch {}
@@ -2304,10 +2307,76 @@ const sentence = (k, n, o = {}) => {
   return w;
 };
 // kind "mark": n = total so far, o = { block, split (s), total (s) }; kind "goal": n = today's total
+// ---- "lower the music while speaking" (ducking)
+// Web Audio just mixes in: Spotify keeps full volume and can drown the cue. A short <audio>
+// clip (under 5 s) makes Chrome on Android ask for *transient, duckable* audio focus, so the
+// music dips while it plays and comes back after (a longer clip would pause the music, so
+// cues are cut at sentence breaks into pieces of at most ~4.5 s). On iPhone the page's audio
+// session is switched to "transient" (duck others) while a cue plays, "ambient" otherwise.
+const MAX_CLIP_S = 4.5;
+function wavURL(buf) { // mono 16-bit PCM WAV
+  const d = buf.getChannelData(0), n = d.length, sr = buf.sampleRate, b = new ArrayBuffer(44 + 2 * n), v = new DataView(b);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, "RIFF"); v.setUint32(4, 36 + 2 * n, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, 2 * n, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + 2 * i, Math.max(-1, Math.min(1, d[i])) * 32767, true);
+  return URL.createObjectURL(new Blob([b], { type: "audio/wav" }));
+}
+// pieces: arrays of ["word", ...] (voice) or [["beep", freq, ms], ...]; returns WAV clip URLs
+async function renderClips(pieces) {
+  const sr = voice ? voice.audio.sampleRate : 22050, urls = [];
+  for (const piece of pieces) {
+    let len = 0.12; for (const w of piece) len += Array.isArray(w) ? w[2] / 1000 + 0.08 : (voice.words[w]?.[1] || 0) + 0.035;
+    const off = new OfflineAudioContext(1, Math.ceil((len + 0.15) * sr), sr); let t = 0.08;
+    for (const w of piece) {
+      if (Array.isArray(w)) { // beep
+        const [, f, ms] = w, o = off.createOscillator(), g = off.createGain(), d = ms / 1000;
+        o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.7, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+        o.connect(g); g.connect(off.destination); o.start(t); o.stop(t + d + 0.02); t += d + 0.08; continue;
+      }
+      const seg = voice.words[w]; if (!seg) continue;
+      const src = off.createBufferSource(); src.buffer = voice.audio; src.connect(off.destination); src.start(t, seg[0], seg[1]); t += seg[1] + 0.035;
+    }
+    urls.push(wavURL(await off.startRendering()));
+  }
+  return urls;
+}
+// split a sentence (with "|" breaks) into pieces of at most MAX_CLIP_S
+function splitWords(words) {
+  const sentences = []; let cur = [];
+  for (const w of words) { if (w === "|") { if (cur.length) sentences.push(cur); cur = []; } else cur.push(w); }
+  if (cur.length) sentences.push(cur);
+  const dur = ws => ws.reduce((q, w) => q + (voice.words[w]?.[1] || 0) + 0.035, 0.2), pieces = [];
+  for (const sn of sentences) { const last = pieces[pieces.length - 1]; if (last && dur(last) + 0.28 + dur(sn) <= MAX_CLIP_S) last.push(...sn); else pieces.push(sn); }
+  return pieces;
+}
+let duckChain = Promise.resolve();
+function playDucked(pieces) {
+  duckChain = duckChain.then(async () => {
+    const urls = await renderClips(pieces);
+    try { if (navigator.audioSession) navigator.audioSession.type = "transient"; } catch {}
+    for (const u of urls) {
+      await new Promise(res => {
+        const a = new Audio(u); a.volume = 1; a.onended = a.onerror = () => res();
+        a.play().catch(() => res()); setTimeout(res, (MAX_CLIP_S + 2) * 1000); // never wait forever
+      });
+      URL.revokeObjectURL(u);
+    }
+    try { if (navigator.audioSession) navigator.audioSession.type = "ambient"; } catch {}
+    window.__cueClips = (window.__cueClips || 0) + urls.length;
+  }).catch(e => console.warn("cue failed:", e));
+  return duckChain;
+}
+
 function cue(kind, n, o = {}) {
   const c = cueCfg();
+  const notes = kind === "goal" ? [[660, 130], [880, 130], [1175, 300]] : [[988, 110], [988, 110]];
+  if (c.duck !== false && window.OfflineAudioContext && (c.style !== "voice" || voice)) {
+    playDucked(c.style === "voice" ? splitWords(sentence(kind, n, o)) : [notes.map(([f, ms]) => ["beep", f, ms])]);
+    return;
+  }
   if (c.style === "voice" && say(sentence(kind, n, o))) return;
-  beep(kind === "goal" ? [[660, 130], [880, 130], [1175, 300]] : [[988, 110], [988, 110]]);
+  beep(notes);
 }
 // Milestones in a session: called after each recount. times = when each skip happened (s).
 function announceMilestones(st, count, times, startT, activeS) {
@@ -2328,11 +2397,11 @@ function paintCues() {
   $("cueEvery").value = presets.includes(c.every) ? String(c.every) : "custom";
   $("cueCustomWrap").hidden = presets.includes(c.every); if (!presets.includes(c.every)) $("cueCustom").value = c.every;
   (c.style === "voice" ? $("cueVoice") : $("cueBeep")).checked = true; $("cueGoal").checked = !!c.goal;
-  $("cueSplit").checked = !!c.split; $("cueTotal").checked = !!c.total;
+  $("cueSplit").checked = !!c.split; $("cueTotal").checked = !!c.total; $("cueDuck").checked = c.duck !== false;
   $("cueSplitRow").hidden = $("cueTotalRow").hidden = c.style !== "voice";
-  $("cueHint").textContent = c.style === "voice"
-    ? `Spoken over your music without pausing it, e.g. "${cueExample(c)}". On iPhone, the silent switch mutes it.`
-    : "Beeps play over your music without pausing it. On iPhone they follow the silent switch.";
+  $("cueHint").textContent = (c.style === "voice" ? `e.g. "${cueExample(c)}" ` : "") +
+    (c.duck !== false ? "Your music dips while the cue plays, then comes back; it isn't paused." : "Plays over your music at full volume, without pausing it.") +
+    " On iPhone, the silent switch mutes it.";
   // pocket screen picker
   const sel = $("pocketCue"), opts = [...new Set([...presets, c.every])].sort((a, b) => a - b);
   sel.innerHTML = opts.map(v => `<option value="${v}">${v ? `Every ${fmtInt(v)}` : "Off"}</option>`).join("");
@@ -2905,6 +2974,7 @@ $("cueTest").addEventListener("click", async () => {
 });
 $("cueSplit").addEventListener("change", e => setCues({ split: e.target.checked }));
 $("cueTotal").addEventListener("change", e => setCues({ total: e.target.checked }));
+$("cueDuck").addEventListener("change", e => setCues({ duck: e.target.checked }));
 $("pocketCue").addEventListener("change", e => { setCues({ every: +e.target.value }); audioReady(); });
 paintCues();
 $("liveStop").addEventListener("click", stopLive);
