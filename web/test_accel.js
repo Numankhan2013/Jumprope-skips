@@ -174,7 +174,7 @@ function walk2(secs, seed = 1, o = {}) {
   }
   return { t, xyz: { x: X, y: Y, z: Z }, truth: 0 };
 }
-const join = (...ws) => { const o = { t: [], xyz: { x: [], y: [], z: [] } }; let off = 0; for (const w of ws) { o.t.push(...w.t.map(q => q + off)); for (const k of "xyz") o.xyz[k].push(...w.xyz[k]); off = o.t[o.t.length - 1] + 0.02; } return o; };
+const join = (...ws) => { const o = { t: [], xyz: { x: [], y: [], z: [] }, truth: 0 }; let off = 0; for (const w of ws) { o.t.push(...w.t.map(q => q + off)); for (const k of "xyz") o.xyz[k].push(...w.xyz[k]); o.truth += w.truth || 0; off = o.t[o.t.length - 1] + 0.02; } return o; };
 for (const [name, mk, truth, tol] of [
   ["low hops, 80 + pause + 70", s => shallow([["rest", 3], ["jump", 80, 150], ["rest", 4], ["jump", 70, 150], ["rest", 3]], s), 150, 2],
   ["lower hops (0.55-0.85 g)", s => shallow([["rest", 3], ["jump", 150, 150], ["rest", 3]], s, { dip: [0.55, 0.85] }), 150, 30],
@@ -186,6 +186,26 @@ for (const [name, mk, truth, tol] of [
   const w = mk(seed), r = core.countAccel(w.t, w.xyz), pass = Math.abs(r.skips - truth) <= tol;
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${truth}, sets [${r.sets.map(s => s.skips)}]`);
+}
+// Live count, the way the app shows it: recount every second, lock in skips once they're 4 s
+// old. The number must never overshoot the settled truth by more than 2 or jump more than 4
+// in a second (it used to overshoot by ~13 and announce milestones late or twice).
+for (const [name, w] of [
+  ["live: low hops 80 + pause + 70", shallow([["rest", 3], ["jump", 80, 150], ["rest", 5], ["jump", 70, 150], ["rest", 3]], 11)],
+  ["live: low hops, walking between", join(shallow([["rest", 3], ["jump", 40, 150]], 6), walk2(6, 6), shallow([["jump", 30, 140]], 15), walk2(8, 7, { place: "thigh" }), shallow([["jump", 45, 145], ["rest", 3]], 16))],
+  ["live: armband", place3d("arm", [["rest", 3], ["jump", 60, 120], ["rest", 3], ["jump", 40, 130], ["rest", 3]], 2, {})],
+]) {
+  const a = w.xyz, T = w.t[w.t.length - 1], fin = core.countAccel(w.t, a).skipTimes, committed = []; let lastT = -Infinity, over = 0, step = 0, prev = 0;
+  for (let s1 = 3; s1 <= T + 0.01; s1 += 1) {
+    let m = w.t.findIndex(q => q > s1); if (m < 0) m = w.t.length; if (m < 200) continue;
+    const r = core.countAccel(w.t.slice(0, m), { x: a.x.slice(0, m), y: a.y.slice(0, m), z: a.z.slice(0, m) }), hz = w.t[m - 1] - 4;
+    for (const q of r.skipTimes) if (q > lastT + 0.15 && q <= hz) { committed.push(q); lastT = q; }
+    over = Math.max(over, committed.length - fin.filter(q => q <= hz).length); step = Math.max(step, committed.length - prev); prev = committed.length;
+  }
+  const final = committed.length + fin.filter(q => q > lastT + 0.15).length, truth = w.truth;
+  const pass = over <= 2 && step <= 4 && Math.abs(final - truth) <= Math.max(3, truth * 0.03);
+  ok &&= pass;
+  console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)}        : final ${final}, truth ${truth}, live overshoot ${over}, biggest step ${step}/s`);
 }
 // a long session: 40 minutes, ~5,000 skips with rests
 const plan = []; for (let i = 0; i < 25; i++) plan.push(["jump", 200, 115 + (i % 4) * 8], ["rest", 25 + (i % 3) * 10], ...(i % 5 === 4 ? [["walk", 8]] : []));

@@ -310,6 +310,7 @@ async function stopLive() {
 // Nothing is recorded; the count is live and final as soon as you stop.
 let pk = null;
 const PK_KEY = "pocket-current";
+const SETTLE_S = 4; // seconds before a skip is locked into the live count
 // ---- sound cues: settings live in the (synced) profile
 // style "voice": recorded words stitched into sentences, played through Web Audio so they mix
 // with music (like a sound effect) instead of pausing it the way the phone's text-to-speech does.
@@ -453,7 +454,7 @@ async function startPocket() {
   audioReady(); // this tap unlocks sound on iPhone
   pk = { t: [], x: [], y: [], z: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
     shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
-    hiddenMs: 0, hiddenAt: null, hides: 0, ticks: 0, noGravity: 0, level: 0, peak: 0 };
+    hiddenMs: 0, hiddenAt: null, hides: 0, ticks: 0, committed: [], lastCommitT: -Infinity, noGravity: 0, level: 0, peak: 0 };
   pk.onMotion = e => {
     if (pk.paused) return;
     const g = e.accelerationIncludingGravity;
@@ -508,18 +509,32 @@ function pocketTick() {
   try {
     const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z });
     pk.nextCount = performance.now() + 3 * (performance.now() - now);
-    // the live number never goes backwards (the newest second or two is still being settled);
-    // the final count when you finish is always the full analysis
-    pk.count = Math.max(pk.count, r.skips);
+    // Lock in skips once they're SETTLE_S old. The newest few seconds are still uncertain (is
+    // that bounce a skip? is this set clear jumps or low hops?), and counting them straight away
+    // made the live number overshoot, jump and fall back. Locked-in skips never change, so the
+    // number only climbs, and each milestone is announced once, at the right time.
+    const horizon = pk.t[pk.t.length - 1] - SETTLE_S;
+    for (const q of r.skipTimes) if (q > pk.lastCommitT + 0.15 && q <= horizon) { pk.committed.push(q); pk.lastCommitT = q; }
+    pk.count = pk.committed.length;
     $("pocketCount").textContent = fmtInt(pk.count);
-    announceMilestones(pk, pk.count, r.skipTimes, pk.t[0], activeSeconds());
+    announceMilestones(pk, pk.count, pk.committed, pk.t[0], activeSeconds());
     pocketGoalPaint(); // after the milestone, so "200 skips…" comes before "Goal reached"
+  } catch {}
+}
+// When you pause, nothing new is coming: lock in the last few seconds too, so the screen shows your real total.
+function settleAll() {
+  if (!pk || pk.t.length < 200) return;
+  try {
+    const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z });
+    for (const q of r.skipTimes) if (q > pk.lastCommitT + 0.15) { pk.committed.push(q); pk.lastCommitT = q; }
+    pk.count = pk.committed.length; $("pocketCount").textContent = fmtInt(pk.count);
+    announceMilestones(pk, pk.count, pk.committed, pk.t[0], activeSeconds()); pocketGoalPaint();
   } catch {}
 }
 // 3) pause / resume: paused time is cut out, so it doesn't count as rest
 function pausePocket() {
   if (!pk || pk.paused) return;
-  pocketTick(); pk.paused = true; pk.pausedAt = performance.now(); pk.activeMs += pk.pausedAt - pk.runFrom;
+  settleAll(); pk.paused = true; pk.pausedAt = performance.now(); pk.activeMs += pk.pausedAt - pk.runFrom;
   pocketState("paused"); haptic([30, 40, 30]);
 }
 function resumePocket() {
@@ -544,7 +559,7 @@ async function finishPocketSession() {
   const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, awake: P.lock.how() };
   // keep the raw sensor data of the last session, so it can be checked (Profile > Pocket recording)
   SkipEngine.idb.put("pocket-last", { ...packMotion(P), diag, ua: navigator.userAgent });
-  await finishPocket(P.t, motionOf(packMotion(P)), P.started, diag);
+  await finishPocket(P.t, motionOf(packMotion(P)), P.started, diag, { committed: P.committed, lastT: P.lastCommitT });
 }
 function discardPocket() {
   const b = $("pocketDiscard");
@@ -564,11 +579,24 @@ function pocketDiagnosis(t, diag) {
 // stored motion: three axes (current), or just |a| (sessions saved by older versions)
 const packMotion = P => ({ started: P.started, t: Float64Array.from(P.t), x: Float32Array.from(P.x), y: Float32Array.from(P.y), z: Float32Array.from(P.z) });
 const motionOf = c => c.x ? { x: Array.from(c.x), y: Array.from(c.y), z: Array.from(c.z) } : Array.from(c.a);
-async function finishPocket(t, a, started, diag) {
+// group skip times into sets (a pause of more than ~2.6 beats, at least 1.2 s, starts a new set)
+function setsFromTimes(times) {
+  const gaps = []; for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] < 1.2) gaps.push(times[i] - times[i - 1]);
+  const beat = gaps.length ? gaps.sort((p, q) => p - q)[gaps.length >> 1] : 0.45, maxGap = Math.max(1.2, 2.6 * beat), sets = [];
+  for (const q of times) { const cur = sets[sets.length - 1]; if (cur && q - cur.last <= maxGap) { cur.last = q; cur.skips++; } else sets.push({ first: q, last: q, skips: 1 }); }
+  return { beat, sets: sets.map(x => ({ start: x.first - beat / 2, end: x.last + beat / 2, skips: x.skips })) };
+}
+async function finishPocket(t, a, started, diag, live) {
   SkipEngine.idb.del(PK_KEY);
   if (t.length < 200) { showError(diag ? pocketDiagnosis(t, diag) : "That was too short to count."); return; }
   try {
     const r = SkipCore.countAccel(Array.from(t), a); r.source = "pocket";
+    if (live && live.committed.length) {
+      // the result matches what you watched: everything locked in live, plus the last few seconds
+      const times = [...live.committed, ...r.skipTimes.filter(q => q > live.lastT + 0.15)], g = setsFromTimes(times);
+      const jumping = g.sets.reduce((q, x) => q + x.end - x.start, 0);
+      Object.assign(r, { skips: times.length, skipTimes: times, sets: g.sets, jumpingSeconds: jumping, restSeconds: Math.max(0, r.totalSeconds - jumping) });
+    }
     $("playerCard").hidden = true; $("speedNote").hidden = true;
     if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
     else { renderResult(r); showError(pocketDiagnosis(t, diag)); }
