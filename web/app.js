@@ -310,7 +310,7 @@ async function stopLive() {
 // Nothing is recorded; the count is live and final as soon as you stop.
 let pk = null;
 const PK_KEY = "pocket-current";
-const SETTLE_S = 4; // seconds before a skip is locked into the live count
+const SETTLE_S = 4; // seconds before a skip is locked in (it can no longer be changed)
 // ---- sound cues: settings live in the (synced) profile
 // style "voice": recorded words stitched into sentences, played through Web Audio so they mix
 // with music (like a sound effect) instead of pausing it the way the phone's text-to-speech does.
@@ -515,9 +515,13 @@ function pocketTick() {
     // number only climbs, and each milestone is announced once, at the right time.
     const horizon = pk.t[pk.t.length - 1] - SETTLE_S;
     for (const q of r.skipTimes) if (q > pk.lastCommitT + 0.15 && q <= horizon) { pk.committed.push(q); pk.lastCommitT = q; }
-    pk.count = pk.committed.length;
+    // On screen: the settled skips plus what the counter sees in the last few seconds right now.
+    // Settled ones never change; the recent part can still be corrected, but in replays it kept
+    // the screen within ~1 skip of what was actually done (settled-only lagged by ~10).
+    const recent = r.skipTimes.filter(q => q > pk.lastCommitT + 0.15), times = pk.committed.concat(recent);
+    pk.count = times.length;
     $("pocketCount").textContent = fmtInt(pk.count);
-    announceMilestones(pk, pk.count, pk.committed, pk.t[0], activeSeconds());
+    announceMilestones(pk, pk.count, times, pk.t[0], activeSeconds());
     pocketGoalPaint(); // after the milestone, so "200 skips…" comes before "Goal reached"
   } catch {}
 }

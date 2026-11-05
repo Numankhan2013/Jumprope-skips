@@ -358,12 +358,14 @@
     if (Array.isArray(a) || ArrayBuffer.isView(a)) { const r0 = resample(t, a, ACCEL_HZ); return { v: r0.a, offset: r0.offset }; }
     const rx = resample(t, a.x, ACCEL_HZ), ry = resample(t, a.y, ACCEL_HZ), rz = resample(t, a.z, ACCEL_HZ);
     const lp = c => filtfilt([biquad(0.4, ACCEL_HZ, "low")], c); // gravity: the slow part of each axis
-    const gx = lp(rx.a), gy = lp(ry.a), gz = lp(rz.a), v = new Float64Array(rx.a.length);
-    for (let i = 0; i < v.length; i++) {
-      const n = Math.hypot(gx[i], gy[i], gz[i]) || 1;
-      v[i] = (rx.a[i] * gx[i] + ry.a[i] * gy[i] + rz.a[i] * gz[i]) / n;
+    const gx = lp(rx.a), gy = lp(ry.a), gz = lp(rz.a), m = rx.a.length, v = new Float64Array(m);
+    const h = [new Float64Array(m), new Float64Array(m), new Float64Array(m)]; // sideways part (what's left after the vertical)
+    for (let i = 0; i < m; i++) {
+      const n = Math.hypot(gx[i], gy[i], gz[i]) || 1, ux = gx[i] / n, uy = gy[i] / n, uz = gz[i] / n;
+      v[i] = rx.a[i] * ux + ry.a[i] * uy + rz.a[i] * uz;
+      h[0][i] = rx.a[i] - v[i] * ux; h[1][i] = ry.a[i] - v[i] * uy; h[2][i] = rz.a[i] - v[i] * uz;
     }
-    return { v, offset: rx.offset };
+    return { v, h, offset: rx.offset };
   }
 
   // One-by-one jump detector: moments in the air (and, on an arm, landing jolts).
@@ -453,7 +455,7 @@
   //  - a steady rhythm (autocorrelation), with the beat taken as the first strong repeat, so a
   //    second bump per skip (arm swing, double landing) can't double the count;
   //  - sharp landings (energy above 6 Hz): turning the rope without jumping is smooth;
-  //  - not repeating every two steps (walking: the leg with the phone lands differently);
+  //  - no sideways sway at half the beat: that's walking (one sway per stride of two steps);
   //  - lighter or bigger swings than walking; weaker windows at the same beat only extend
   //    a stretch, never start one;
   //  - at least one clearly airborne jump in it (one-by-one detector). When that detector
@@ -462,7 +464,9 @@
   // ~1 % error overall; walking or turning the rope alone count 0.
   function countAccel(t, a, opts = {}) {
     if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
-    const G = 9.81, HZ = ACCEL_HZ, { v, offset } = accelVertical(t, a), n = v.length;
+    const G = 9.81, HZ = ACCEL_HZ, { v, h, offset } = accelVertical(t, a), n = v.length;
+    // amplitude of signal x at frequency f (Hz) over [i0, i1)
+    const amp = (x, i0, i1, f) => { let re = 0, im = 0; for (let i = i0; i < i1; i++) { const ph = 2 * Math.PI * f * i / HZ; re += x[i] * Math.cos(ph); im -= x[i] * Math.sin(ph); } return 2 * Math.hypot(re, im) / (i1 - i0); };
     const fin = r => { r.skipTimes = r.skipTimes.map(x => x + offset); for (const st of r.sets) { st.start += offset; st.end += offset; } r.fps = HZ; r.offset = offset; r.bodySize = 1; return r; };
     const ev = countAccelEvents(v, opts.engine === "events" ? opts : {});          // clear jumps, grouped into sets
     if (opts.engine === "events") return fin(ev);
@@ -484,7 +488,14 @@
       let eh = 0, el = 0; for (let i = i0; i < i1; i++) { eh += hf[i] ** 2; el += (x[i] - mean) ** 2; }
       const impact = Math.sqrt(eh / (el || 1)), asym = L0 && 2 * L0 < W - 1 ? rho[2 * L0] - rho[L0] : 0;
       const vs = Array.from(v.subarray(i0, i1)), p5 = percentile(vs, 5) / G, spread = percentile(vs, 95) - percentile(vs, 5);
-      const rhythmic = mx >= (opts.rhoMin ?? 0.5) && L0 && impact >= (opts.impactMin ?? 0.3) && asym <= (opts.asymMax ?? 0.06);
+      // (asym, "repeats every two steps", was tried as a walking check but skipping with uneven
+      // jumps scores 0.07-0.2 on it vs walking 0.01-0.09: it rejected real skipping. Off by default.)
+      // Walking: the body sways sideways once per stride (two steps), i.e. at half the beat.
+      // Skipping in place doesn't (both feet do the same thing; an arm's rope swing is at the
+      // beat itself). Simulated: walking 0.87-1.47 x the bounce, skipping 0.02-0.48.
+      let sway = 0;
+      if (h && L0) { const f = HZ / L0, vb = amp(v, i0, i1, f) || 1; sway = Math.hypot(amp(h[0], i0, i1, f / 2), amp(h[1], i0, i1, f / 2), amp(h[2], i0, i1, f / 2)) / vb; }
+      const rhythmic = mx >= (opts.rhoMin ?? 0.5) && L0 && impact >= (opts.impactMin ?? 0.2) && asym <= (opts.asymMax ?? Infinity) && sway < (opts.swayMax ?? 0.7);
       const lv = !rhythmic ? 0 : (p5 < (opts.p5Max ?? 0.75) || spread >= (opts.spreadMin ?? 8)) ? 2 : (p5 < (opts.p5Weak ?? 0.85) || spread >= (opts.spreadWeak ?? 6)) ? 1 : 0;
       const c0 = i0 + Math.round(W / 2 - hop / 2), c1 = Math.min(n, c0 + hop);
       const mark = (p, q) => { for (let i = p; i < q; i++) if (lv > level[i]) { level[i] = lv; lagAt[i] = L0 / HZ; } };

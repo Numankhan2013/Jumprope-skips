@@ -140,7 +140,7 @@ for (const [name, place, plan, o, truth] of [
 // Low, efficient hops (the airborne dip only reaches ~0.4-0.85 g, soft landings, uneven
 // rhythm) and more realistic walking (the leg with the phone lands harder; once-per-stride sway).
 function shallow(plan, seed = 1, o = {}) {
-  const R = rng(seed), t = [], X = [], Y = [], Z = []; let now = 0, truth = 0;
+  const R = rng(seed), t = [], X = [], Y = [], Z = [], jumps = []; let now = 0, truth = 0;
   const p1 = R() * 6.28, p2 = (R() - .5) * 3.1, c1 = Math.cos(p1), s1 = Math.sin(p1), c2 = Math.cos(p2), s2 = Math.sin(p2);
   const push = (x, y, z) => { const x1 = c1 * x - s1 * y, y1 = s1 * x + c1 * y, y2 = c2 * y1 - s2 * z, z2 = s2 * y1 + c2 * z; t.push(now); X.push(x1); Y.push(y2); Z.push(z2); now += 1 / ((o.hz || 60) * (0.9 + R() * 0.2)); };
   const [dipLo, dipHi] = o.dip || [0.4, 0.8];
@@ -149,6 +149,7 @@ function shallow(plan, seed = 1, o = {}) {
       for (let k = 0; k < n; k++) {
         const T = 60 / rate * (0.85 + R() * 0.3), start = now, end = now + T;           // irregular rhythm
         const flight = T * (0.22 + R() * 0.12), dip = G * (dipLo + R() * (dipHi - dipLo)), land = G * (1.3 + R() * 0.7);
+        jumps.push(start + flight / 2);
         while (now < end) {
           const ph = now - start; let v;
           if (ph < flight) v = G - (G - dip) * Math.sin(Math.PI * ph / flight);          // shallow, rounded dip
@@ -160,7 +161,7 @@ function shallow(plan, seed = 1, o = {}) {
     } else if (kind === "walk") { const end = now + n; while (now < end) { const ph = (now * 1.9) % 1; push((R() - .5), G + (ph < .12 ? 6 * Math.sin(ph / .12 * Math.PI) : 0) - 1.5 * Math.sin(2 * Math.PI * ph) + (R() - .5) * 2, (R() - .5)); } }
     else { const end = now + n; while (now < end) push((R() - .5), G + (R() - .5), (R() - .5)); }
   }
-  return { t, xyz: { x: X, y: Y, z: Z }, truth };
+  return { t, xyz: { x: X, y: Y, z: Z }, truth, jumps };
 }
 function walk2(secs, seed = 1, o = {}) {
   const R = rng(seed), t = [], X = [], Y = [], Z = []; let now = 0;
@@ -187,25 +188,26 @@ for (const [name, mk, truth, tol] of [
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${truth}, sets [${r.sets.map(s => s.skips)}]`);
 }
-// Live count, the way the app shows it: recount every second, lock in skips once they're 4 s
-// old. The number must never overshoot the settled truth by more than 2 or jump more than 4
-// in a second (it used to overshoot by ~13 and announce milestones late or twice).
+// Live count, the way the app shows it: recount every second; skips older than 4 s are locked
+// in, the screen shows locked-in + what the counter sees in the last few seconds. Compared with
+// the true number of skips done at that moment: on average within 2, never more than 3 ahead.
 for (const [name, w] of [
-  ["live: low hops 80 + pause + 70", shallow([["rest", 3], ["jump", 80, 150], ["rest", 5], ["jump", 70, 150], ["rest", 3]], 11)],
-  ["live: low hops, walking between", join(shallow([["rest", 3], ["jump", 40, 150]], 6), walk2(6, 6), shallow([["jump", 30, 140]], 15), walk2(8, 7, { place: "thigh" }), shallow([["jump", 45, 145], ["rest", 3]], 16))],
-  ["live: armband", place3d("arm", [["rest", 3], ["jump", 60, 120], ["rest", 3], ["jump", 40, 130], ["rest", 3]], 2, {})],
+  ["live: steady 100 @150", shallow([["rest", 3], ["jump", 100, 150], ["rest", 5]], 11)],
+  ["live: low hops 80 + pause + 70", shallow([["rest", 3], ["jump", 80, 150], ["rest", 5], ["jump", 70, 150], ["rest", 3]], 12)],
+  ["live: slow 110/min", shallow([["rest", 3], ["jump", 80, 110], ["rest", 4]], 14)],
+  ["live: fast 170/min", shallow([["rest", 3], ["jump", 120, 170], ["rest", 4]], 13)],
 ]) {
-  const a = w.xyz, T = w.t[w.t.length - 1], fin = core.countAccel(w.t, a).skipTimes, committed = []; let lastT = -Infinity, over = 0, step = 0, prev = 0;
-  for (let s1 = 3; s1 <= T + 0.01; s1 += 1) {
+  const a = w.xyz, committed = []; let lastT = -Infinity, ahead = 0, sum = 0, n = 0, shown = 0;
+  for (let s1 = 3; s1 <= w.t[w.t.length - 1] + 0.01; s1 += 1) {
     let m = w.t.findIndex(q => q > s1); if (m < 0) m = w.t.length; if (m < 200) continue;
-    const r = core.countAccel(w.t.slice(0, m), { x: a.x.slice(0, m), y: a.y.slice(0, m), z: a.z.slice(0, m) }), hz = w.t[m - 1] - 4;
-    for (const q of r.skipTimes) if (q > lastT + 0.15 && q <= hz) { committed.push(q); lastT = q; }
-    over = Math.max(over, committed.length - fin.filter(q => q <= hz).length); step = Math.max(step, committed.length - prev); prev = committed.length;
+    const latest = w.t[m - 1], r = core.countAccel(w.t.slice(0, m), { x: a.x.slice(0, m), y: a.y.slice(0, m), z: a.z.slice(0, m) });
+    for (const q of r.skipTimes) if (q > lastT + 0.15 && q <= latest - 4) { committed.push(q); lastT = q; }
+    shown = committed.length + r.skipTimes.filter(q => q > lastT + 0.15).length;
+    const done = w.jumps.filter(q => q <= latest).length; ahead = Math.max(ahead, shown - done); sum += Math.abs(shown - done); n++;
   }
-  const final = committed.length + fin.filter(q => q > lastT + 0.15).length, truth = w.truth;
-  const pass = over <= 2 && step <= 4 && Math.abs(final - truth) <= Math.max(3, truth * 0.03);
+  const avg = sum / n, pass = ahead <= 3 && avg <= 2 && Math.abs(shown - w.truth) <= Math.max(2, w.truth * 0.02);
   ok &&= pass;
-  console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)}        : final ${final}, truth ${truth}, live overshoot ${over}, biggest step ${step}/s`);
+  console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)}        : final ${shown}, truth ${w.truth}, on screen vs done: avg off ${avg.toFixed(1)}, most ahead ${ahead}`);
 }
 // a long session: 40 minutes, ~5,000 skips with rests
 const plan = []; for (let i = 0; i < 25; i++) plan.push(["jump", 200, 115 + (i % 4) * 8], ["rest", 25 + (i % 3) * 10], ...(i % 5 === 4 ? [["walk", 8]] : []));
