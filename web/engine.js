@@ -300,11 +300,16 @@ self.onmessage = async (e) => {
 
     // Screen wake lock that comes back after the screen was off or the app was switched.
   function keepAwake() {
-    let lock = null, on = true;
-    const get = async () => { if (!on || document.visibilityState !== "visible") return; try { lock = await navigator.wakeLock?.request("screen"); } catch {} };
+    let lock = null, on = true, held = false;
+    const get = async () => {
+      if (!on || document.visibilityState !== "visible") return;
+      try { lock = await navigator.wakeLock?.request("screen"); held = !!lock; lock?.addEventListener?.("release", () => { held = false; }); } catch { held = false; }
+    };
     const vis = () => { if (document.visibilityState === "visible") get(); };
-    document.addEventListener("visibilitychange", vis); get();
-    return { release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
+    document.addEventListener("visibilitychange", vis);
+    const ready = get();
+    // isOn(): did the browser actually agree to keep the screen on?
+    return { ready, isOn: () => held, release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
   }
 
   root.SkipEngine = { analyse, Pool, countFrom, keepAwake, idb, whenVisible, W };

@@ -163,6 +163,10 @@ details.tips b { color: var(--ink); }
 .pocket[data-state="ready"] .pg-goal { background: #ff7a45; }
 .pocket[data-state="counting"] .pg-goal { pointer-events: none; background: transparent; padding: 0; }
 #pocketGoalInput { width: 9rem; text-align: center; font: inherit; font-size: 1.1rem; padding: 8px; border-radius: 10px; border: 0; color: #111; }
+.meter { width: 60%; height: 4px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 16px; }
+.meter i { display: block; height: 100%; width: 100%; background: #ff7a45; transform-origin: left; transform: scaleX(0); }
+.pocket[data-state="ready"] .meter { visibility: hidden; }
+.pocket-warn { color: #ffb38f; background: rgba(255,122,69,.12); border-radius: 10px; padding: 8px 12px; font-size: 0.88rem; max-width: 34ch; margin: 12px 0 0; }
 .pocket-hint { color: rgba(255,255,255,.55); font-size: 0.9rem; max-width: 32ch; margin: 14px 0 0; }
 .pocket-actions { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
 .pocket[data-state="ready"] [data-for="ready"], .pocket[data-state="counting"] [data-for="counting"], .pocket[data-state="paused"] [data-for="paused"] { display: flex; }
@@ -535,6 +539,11 @@ details.card[open] > summary::after { content: "–"; }
     </div>
 
     <div class="card">
+      <p class="label">Pocket recording</p>
+      <p class="hint" style="margin:0">If pocket counting got it wrong, save the motion data from your last pocket session and send it over, so the counter can be tuned to how your phone moves in your pocket.</p>
+      <div class="row-actions"><button class="btn btn-ghost btn-small" id="pocketRecBtn" type="button">Save last pocket recording</button></div>
+    </div>
+    <div class="card">
       <p class="label">Daily goal</p>
       <label class="f" for="dailyGoal">Skips every day<input id="dailyGoal" type="number" inputmode="numeric" min="10" step="100" value="1000"></label>
       <p class="hint" style="margin:0">Your usual target. To aim higher on one day, change today's goal on the home card or before a pocket session.</p>
@@ -585,6 +594,8 @@ details.card[open] > summary::after { content: "–"; }
       <div class="pg-text"><span id="pocketToday">0</span> / <button type="button" class="pg-goal" id="pocketGoalBtn"><span id="pocketGoalNum">1,000</span></button> today</div>
       <input id="pocketGoalInput" type="number" inputmode="numeric" min="10" step="500" aria-label="Today's goal in skips" hidden>
     </div>
+    <div class="meter" aria-hidden="true"><i id="pocketMeter"></i></div>
+    <p class="pocket-warn" id="pocketWarn" hidden></p>
     <p class="pocket-hint" id="pocketHint">Tap the goal to change it for today. Press Start, put the phone in your pocket and skip. Keep the screen on.</p>
   </div>
 

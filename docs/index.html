@@ -176,6 +176,10 @@ details.tips b { color: var(--ink); }
 .pocket[data-state="ready"] .pg-goal { background: #ff7a45; }
 .pocket[data-state="counting"] .pg-goal { pointer-events: none; background: transparent; padding: 0; }
 #pocketGoalInput { width: 9rem; text-align: center; font: inherit; font-size: 1.1rem; padding: 8px; border-radius: 10px; border: 0; color: #111; }
+.meter { width: 60%; height: 4px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 16px; }
+.meter i { display: block; height: 100%; width: 100%; background: #ff7a45; transform-origin: left; transform: scaleX(0); }
+.pocket[data-state="ready"] .meter { visibility: hidden; }
+.pocket-warn { color: #ffb38f; background: rgba(255,122,69,.12); border-radius: 10px; padding: 8px 12px; font-size: 0.88rem; max-width: 34ch; margin: 12px 0 0; }
 .pocket-hint { color: rgba(255,255,255,.55); font-size: 0.9rem; max-width: 32ch; margin: 14px 0 0; }
 .pocket-actions { display: none; flex-direction: column; align-items: center; gap: 16px; width: 100%; }
 .pocket[data-state="ready"] [data-for="ready"], .pocket[data-state="counting"] [data-for="counting"], .pocket[data-state="paused"] [data-for="paused"] { display: flex; }
@@ -550,6 +554,11 @@ details.card[open] > summary::after { content: "–"; }
     </div>
 
     <div class="card">
+      <p class="label">Pocket recording</p>
+      <p class="hint" style="margin:0">If pocket counting got it wrong, save the motion data from your last pocket session and send it over, so the counter can be tuned to how your phone moves in your pocket.</p>
+      <div class="row-actions"><button class="btn btn-ghost btn-small" id="pocketRecBtn" type="button">Save last pocket recording</button></div>
+    </div>
+    <div class="card">
       <p class="label">Daily goal</p>
       <label class="f" for="dailyGoal">Skips every day<input id="dailyGoal" type="number" inputmode="numeric" min="10" step="100" value="1000"></label>
       <p class="hint" style="margin:0">Your usual target. To aim higher on one day, change today's goal on the home card or before a pocket session.</p>
@@ -600,6 +609,8 @@ details.card[open] > summary::after { content: "–"; }
       <div class="pg-text"><span id="pocketToday">0</span> / <button type="button" class="pg-goal" id="pocketGoalBtn"><span id="pocketGoalNum">1,000</span></button> today</div>
       <input id="pocketGoalInput" type="number" inputmode="numeric" min="10" step="500" aria-label="Today's goal in skips" hidden>
     </div>
+    <div class="meter" aria-hidden="true"><i id="pocketMeter"></i></div>
+    <p class="pocket-warn" id="pocketWarn" hidden></p>
     <p class="pocket-hint" id="pocketHint">Tap the goal to change it for today. Press Start, put the phone in your pocket and skip. Keep the screen on.</p>
   </div>
 
@@ -1386,11 +1397,16 @@ self.onmessage = async (e) => {
 
     // Screen wake lock that comes back after the screen was off or the app was switched.
   function keepAwake() {
-    let lock = null, on = true;
-    const get = async () => { if (!on || document.visibilityState !== "visible") return; try { lock = await navigator.wakeLock?.request("screen"); } catch {} };
+    let lock = null, on = true, held = false;
+    const get = async () => {
+      if (!on || document.visibilityState !== "visible") return;
+      try { lock = await navigator.wakeLock?.request("screen"); held = !!lock; lock?.addEventListener?.("release", () => { held = false; }); } catch { held = false; }
+    };
     const vis = () => { if (document.visibilityState === "visible") get(); };
-    document.addEventListener("visibilitychange", vis); get();
-    return { release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
+    document.addEventListener("visibilitychange", vis);
+    const ready = get();
+    // isOn(): did the browser actually agree to keep the screen on?
+    return { ready, isOn: () => held, release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
   }
 
   root.SkipEngine = { analyse, Pool, countFrom, keepAwake, idb, whenVisible, W };
@@ -1951,8 +1967,8 @@ function pocketState(st) {
   $("pocket").dataset.state = st;
   $("pocketState").textContent = { ready: "Ready", counting: "Counting", paused: "Paused" }[st];
   $("pocketLabel").textContent = st === "ready" ? "skips so far today" : "skips this session";
-  $("pocketHint").textContent = st === "ready" ? "Tap the goal to change it for today. Press Start, put the phone in your pocket and skip. Keep the screen on."
-    : st === "counting" ? "Keep the screen on. To pause, press and hold the button."
+  $("pocketHint").textContent = st === "ready" ? "Press Start, then put the phone in your pocket without locking it. The screen stays on and black; if it turns off, nothing is counted."
+    : st === "counting" ? "Don't lock the phone. The bar above should jump with every skip. To pause, press and hold the button."
     : "Paused. Nothing is being counted.";
 }
 function pocketGoalPaint() {
@@ -1978,13 +1994,38 @@ async function startPocket() {
   } catch { closePocketScreen(); showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
   if ($("sayHundreds").checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // unlock speech on iPhone
   pk = { t: [], a: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
-    shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal() };
+    shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
+    hiddenMs: 0, hiddenAt: null, hides: 0, noGravity: 0, level: 0, peak: 0 };
   pk.onMotion = e => {
     if (pk.paused) return;
-    const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
-    pk.gotData = true; pk.t.push(e.timeStamp / 1000 - pk.shift); pk.a.push(Math.hypot(g.x, g.y, g.z));
+    const g = e.accelerationIncludingGravity;
+    if (!g || g.x == null) { pk.noGravity++; return; }
+    const m = Math.hypot(g.x, g.y, g.z);
+    pk.gotData = true; pk.t.push(e.timeStamp / 1000 - pk.shift); pk.a.push(m);
+    const dev = Math.abs(m - 9.81); pk.level = Math.max(dev, pk.level * 0.9); pk.peak = Math.max(pk.peak, dev); // for the motion meter
   };
   addEventListener("devicemotion", pk.onMotion);
+  // the browser stops all motion data while the screen is off: remember for how long
+  pk.onVis = () => {
+    if (!pk) return;
+    if (document.visibilityState === "hidden") { if (pk.hiddenAt == null) { pk.hiddenAt = performance.now(); pk.hides++; } }
+    else if (pk.hiddenAt != null) {
+      const ms = performance.now() - pk.hiddenAt; pk.hiddenMs += ms; pk.hiddenAt = null;
+      if (ms > 3000 && !pk.paused) { toast(`The screen was off for ${fmtTime(ms / 1000)}. Nothing can be counted while it's off.`); haptic([80, 60, 80]); }
+    }
+  };
+  document.addEventListener("visibilitychange", pk.onVis);
+  pk.meterRaf = requestAnimationFrame(function meter() {
+    if (!pk) return;
+    $("pocketMeter").style.transform = `scaleX(${Math.min(1, pk.level / 25)})`;
+    pk.meterRaf = requestAnimationFrame(meter);
+  });
+  pk.lock.ready.then(() => setTimeout(() => {
+    if (pk && !pk.lock.isOn()) {
+      $("pocketWarn").hidden = false;
+      $("pocketWarn").textContent = "This phone didn't let the app keep the screen on. Before pocketing it, set your screen timeout / Auto-Lock to 5 minutes or more, or the count stops when the screen turns off.";
+    }
+  }, 600));
   $("pocketCount").textContent = "0"; pocketState("counting"); pocketGoalPaint(); haptic(20);
   pk.timer = setInterval(pocketTick, 1000);
   pk.saver = setInterval(() => pk && SkipEngine.idb.put(PK_KEY, { started: pk.started, t: Float64Array.from(pk.t), a: Float32Array.from(pk.a) }), 10000);
@@ -2018,28 +2059,45 @@ function resumePocket() {
 function teardownPocket() {
   if (!pk) return null;
   const P = pk; pk = null;
-  removeEventListener("devicemotion", P.onMotion); clearInterval(P.timer); clearInterval(P.saver); P.lock.release();
+  if (P.hiddenAt != null) P.hiddenMs += performance.now() - P.hiddenAt;
+  removeEventListener("devicemotion", P.onMotion); document.removeEventListener("visibilitychange", P.onVis);
+  cancelAnimationFrame(P.meterRaf); clearInterval(P.timer); clearInterval(P.saver); P.lock.release();
+  $("pocketWarn").hidden = true;
   return P;
 }
 function closePocketScreen() { $("pocket").hidden = true; $("pocketDiscard").classList.remove("confirm"); $("pocketDiscard").textContent = "Discard"; }
 async function finishPocketSession() {
   const P = teardownPocket(); closePocketScreen(); if (!P) return;
-  haptic(30); await finishPocket(P.t, P.a, P.started);
+  haptic(30);
+  const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, wakeLock: P.lock.isOn() };
+  // keep the raw sensor data of the last session, so it can be checked (Profile > Pocket recording)
+  SkipEngine.idb.put("pocket-last", { started: P.started, t: Float64Array.from(P.t), a: Float32Array.from(P.a), diag, ua: navigator.userAgent });
+  await finishPocket(P.t, P.a, P.started, diag);
 }
 function discardPocket() {
   const b = $("pocketDiscard");
   if (!b.classList.contains("confirm")) { b.classList.add("confirm"); b.textContent = "Tap again to discard"; setTimeout(() => { b.classList.remove("confirm"); b.textContent = "Discard"; }, 3000); return; }
   teardownPocket(); SkipEngine.idb.del(PK_KEY); closePocketScreen(); toast("Session discarded");
 }
-async function finishPocket(t, a, started) {
+// Why a session came out empty, in words
+function pocketDiagnosis(t, diag) {
+  if (!diag) return "No skips found.";
+  const rate = t.length > 1 ? t.length / Math.max(1, t[t.length - 1] - t[0]) : 0;
+  if (!t.length && diag.noGravity) return "No skips found: this phone sends motion data without gravity, which this counter can't use. Use the camera or a video instead.";
+  if (!t.length || diag.hiddenS >= Math.max(4, diag.activeS * 0.3)) return `No skips found: the screen was off for ${fmtTime(diag.hiddenS)} of ${fmtTime(diag.activeS)}, and phones stop motion data while it's off. Keep the screen on (the app shows a black screen) and set the screen timeout to 5 minutes or more.`;
+  if (rate < 20) return `No skips found: the phone only sent ${Math.round(rate)} motion readings a second (about 60 are needed). Battery saver can do this; turn it off and try again.`;
+  if (diag.peak < 6) return "No skips found: the phone barely moved. Was it in your pocket while you skipped?";
+  return "No skips found, although the phone did move. Please save the pocket recording (Profile › Pocket recording) and send it, so the counter can be tuned to your pocket.";
+}
+async function finishPocket(t, a, started, diag) {
   SkipEngine.idb.del(PK_KEY);
-  if (t.length < 200) { toast("That was too short to count"); return; }
+  if (t.length < 200) { showError(diag ? pocketDiagnosis(t, diag) : "That was too short to count."); return; }
   try {
     const r = SkipCore.countAccel(Array.from(t), Array.from(a)); r.source = "pocket";
     $("playerCard").hidden = true; $("speedNote").hidden = true;
     if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
-    else { renderResult(r); toast("No skips found. Was the phone in a pocket while you skipped?"); }
-    window.__skipDebug = { via: "pocket", samples: t.length, skipTimes: r.skipTimes };
+    else { renderResult(r); showError(pocketDiagnosis(t, diag)); }
+    window.__skipDebug = { via: "pocket", samples: t.length, skipTimes: r.skipTimes, diag };
     $("results").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
   } catch (e) { showError(e.message || String(e)); }
 }
@@ -2047,8 +2105,13 @@ async function finishPocket(t, a, started) {
 (function holdToPause() {
   const b = $("pocketPause"), ring = $("holdRing"); let raf = 0, t0 = 0;
   const reset = () => { cancelAnimationFrame(raf); ring.style.setProperty("--p", 0); };
-  const step = () => { const p = Math.min(100, (performance.now() - t0) / 8); ring.style.setProperty("--p", p); if (p >= 100) { reset(); pausePocket(); } else raf = requestAnimationFrame(step); };
-  b.addEventListener("pointerdown", e => { e.preventDefault(); t0 = performance.now(); haptic(); raf = requestAnimationFrame(step); });
+  const step = () => { const p = Math.min(100, (performance.now() - t0) / 10); ring.style.setProperty("--p", p); if (p >= 100) { reset(); pausePocket(); } else raf = requestAnimationFrame(step); };
+  b.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    // fabric pressing on the screen shows up as a large, flat contact (or several at once): ignore it
+    if (!e.isPrimary || (e.pointerType === "touch" && (e.width > 70 || e.height > 70))) return;
+    t0 = performance.now(); haptic(); raf = requestAnimationFrame(step);
+  });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, reset);
   b.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pausePocket(); } }); // keyboard: no hold needed
 })();
@@ -2319,6 +2382,18 @@ window.onCloudStatus = (status, user) => {
   const a = $("profileBtn"), txt = $("avatarTxt");
   if (user?.email) { a.classList.add("in"); txt.textContent = user.email[0].toUpperCase(); a.title = user.email; }
   else { a.classList.remove("in"); txt.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.4-3.8 4.2-5.6 7.5-5.6s6.1 1.8 7.5 5.6"/></svg>'; a.title = ""; }
+};
+
+// ================================================================ pocket recording (to tune the counter to a real pocket)
+$("pocketRecBtn").onclick = async () => {
+  const r = await SkipEngine.idb.get("pocket-last");
+  if (!r || !r.t || !r.t.length) { toast("No pocket recording yet. Do a pocket session first."); return; }
+  const data = { app: "skip-count", kind: "pocket-recording", started: new Date(r.started).toISOString(), ua: r.ua, diag: r.diag,
+    t: Array.from(r.t, v => Math.round(v * 1000) / 1000), a: Array.from(r.a, v => Math.round(v * 100) / 100) };
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
+  a.download = `skip-count-pocket-${dayKey(r.started)}.json`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast(`Saved a recording of ${fmtTime(r.t.length / 60)} of motion data`);
 };
 
 // ================================================================ install as an app
