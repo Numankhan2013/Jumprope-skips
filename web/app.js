@@ -383,7 +383,7 @@ async function startPocket() {
   audioReady(); // this tap unlocks sound on iPhone
   pk = { t: [], x: [], y: [], z: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
     shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
-    hiddenMs: 0, hiddenAt: null, hides: 0, noGravity: 0, level: 0, peak: 0 };
+    hiddenMs: 0, hiddenAt: null, hides: 0, ticks: 0, noGravity: 0, level: 0, peak: 0 };
   pk.onMotion = e => {
     if (pk.paused) return;
     const g = e.accelerationIncludingGravity;
@@ -408,20 +408,25 @@ async function startPocket() {
     $("pocketMeter").style.transform = `scaleX(${Math.min(1, pk.level / 25)})`;
     pk.meterRaf = requestAnimationFrame(meter);
   });
-  pk.lock.ready.then(() => setTimeout(() => {
-    if (pk && !pk.lock.isOn()) {
-      $("pocketWarn").hidden = false;
-      $("pocketWarn").textContent = "This phone didn't let the app keep the screen on. Before pocketing it, set your screen timeout / Auto-Lock to 5 minutes or more, or the count stops when the screen turns off.";
-    }
-  }, 600));
+  pk.lock.ready.then(() => setTimeout(checkAwake, 800));
   $("pocketCount").textContent = "0"; pocketState("counting"); pocketGoalPaint(); haptic(20);
   pk.timer = setInterval(pocketTick, 1000);
   pk.saver = setInterval(() => pk && SkipEngine.idb.put(PK_KEY, packMotion(pk)), 10000);
   setTimeout(() => { if (pk && !pk.gotData && !pk.paused) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Pause and discard, then use the camera or a video instead."; } }, 2500);
 }
+// Is something keeping the screen on? (wake lock, or the silent-video fallback)
+function checkAwake() {
+  if (!pk) return;
+  const ok = pk.lock.isOn();
+  $("pocketAwake").textContent = ok ? "Screen stays on" : "Screen may turn off";
+  $("pocketAwake").classList.toggle("bad", !ok);
+  $("pocketWarn").hidden = ok;
+  if (!ok) $("pocketWarn").textContent = "This phone isn't letting the app keep the screen on. Before pocketing it, set Auto-Lock (iPhone: Settings › Display & Brightness) or Screen timeout (Android) to 5 minutes or more, and turn off Low Power Mode / battery saver.";
+}
 const activeSeconds = () => pk ? (pk.activeMs + (pk.paused ? 0 : performance.now() - pk.runFrom)) / 1000 : 0;
 function pocketTick() {
   if (!pk) return;
+  if (++pk.ticks % 5 === 0) checkAwake();
   $("pocketTime").textContent = fmtTime(activeSeconds());
   if (pk.paused) return;
   if (document.visibilityState !== "visible") { $("pocketState").textContent = "Screen off"; return; }
@@ -451,14 +456,14 @@ function teardownPocket() {
   if (P.hiddenAt != null) P.hiddenMs += performance.now() - P.hiddenAt;
   removeEventListener("devicemotion", P.onMotion); document.removeEventListener("visibilitychange", P.onVis);
   cancelAnimationFrame(P.meterRaf); clearInterval(P.timer); clearInterval(P.saver); P.lock.release();
-  $("pocketWarn").hidden = true;
+  $("pocketWarn").hidden = true; $("pocketAwake").textContent = "";
   return P;
 }
 function closePocketScreen() { $("pocket").hidden = true; $("pocketDiscard").classList.remove("confirm"); $("pocketDiscard").textContent = "Discard"; }
 async function finishPocketSession() {
   const P = teardownPocket(); closePocketScreen(); if (!P) return;
   haptic(30);
-  const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, wakeLock: P.lock.isOn() };
+  const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, awake: P.lock.how() };
   // keep the raw sensor data of the last session, so it can be checked (Profile > Pocket recording)
   SkipEngine.idb.put("pocket-last", { ...packMotion(P), diag, ua: navigator.userAgent });
   await finishPocket(P.t, motionOf(packMotion(P)), P.started, diag);

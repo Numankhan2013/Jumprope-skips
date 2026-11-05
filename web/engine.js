@@ -299,17 +299,46 @@ self.onmessage = async (e) => {
   }
 
     // Screen wake lock that comes back after the screen was off or the app was switched.
+  // Keep the screen from turning off while counting.
+  // 1) the Screen Wake Lock API (Chrome, Edge, Safari 16.4+);
+  // 2) where that's missing or refused (e.g. iPhone home-screen apps before iOS 18.4, some
+  //    battery savers), a tiny silent video playing on a loop: phones never auto-lock during
+  //    video playback. It has no sound track, so music keeps playing.
+  // Both are re-armed whenever the page becomes visible again. Call from a tap.
+  const KEEP_AWAKE_MP4 = "data:video/mp4;base64,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";
   function keepAwake() {
-    let lock = null, on = true, held = false;
+    let lock = null, on = true, held = false, vid = null;
+    const startVideo = () => {
+      if (!on || held) return;
+      if (!vid) {
+        vid = document.createElement("video");
+        vid.setAttribute("playsinline", ""); vid.setAttribute("muted", ""); vid.muted = true; vid.loop = true; vid.setAttribute("aria-hidden", "true");
+        vid.src = KEEP_AWAKE_MP4;
+        Object.assign(vid.style, { position: "fixed", width: "1px", height: "1px", opacity: "0.01", left: "0", bottom: "0", pointerEvents: "none", zIndex: "-1" });
+        document.body.appendChild(vid);
+      }
+      const p = vid.play(); if (p && p.catch) p.catch(() => {});
+    };
+    const stopVideo = () => { if (vid) { try { vid.pause(); } catch {} } };
     const get = async () => {
       if (!on || document.visibilityState !== "visible") return;
-      try { lock = await navigator.wakeLock?.request("screen"); held = !!lock; lock?.addEventListener?.("release", () => { held = false; }); } catch { held = false; }
+      try {
+        lock = await navigator.wakeLock?.request("screen"); held = !!lock;
+        lock?.addEventListener?.("release", () => { held = false; if (on && document.visibilityState === "visible") startVideo(); });
+      } catch { held = false; }
+      if (held) stopVideo(); else startVideo();
     };
     const vis = () => { if (document.visibilityState === "visible") get(); };
     document.addEventListener("visibilitychange", vis);
+    startVideo(); // start inside the tap (iPhone requires it), stop again if the wake lock is granted
     const ready = get();
-    // isOn(): did the browser actually agree to keep the screen on?
-    return { ready, isOn: () => held, release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} } };
+    return {
+      ready,
+      // is something actually keeping the screen on?
+      isOn: () => held || !!(vid && !vid.paused && !vid.ended && vid.readyState >= 2),
+      how: () => held ? "wake lock" : (vid && !vid.paused ? "video" : "none"),
+      release() { on = false; document.removeEventListener("visibilitychange", vis); try { lock?.release(); } catch {} if (vid) { stopVideo(); vid.remove(); vid = null; } }
+    };
   }
 
   root.SkipEngine = { analyse, Pool, countFrom, keepAwake, idb, whenVisible, W };

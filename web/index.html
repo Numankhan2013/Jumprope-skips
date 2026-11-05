@@ -150,6 +150,10 @@ details.tips b { color: var(--ink); }
 .pocket-clock { display: inline-flex; align-items: center; }
 .pocket[data-state="ready"] .pocket-clock { visibility: hidden; }
 .pocket[data-state="paused"] .rec { animation: none; background: #888; }
+.pocket-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.pocket-awake { font-size: 0.72rem; color: #8fd9a8; }
+.pocket-awake:not(:empty)::before { content: "● "; }
+.pocket-awake.bad { color: #ffb38f; }
 .pocket-state { padding: 3px 10px; border-radius: 99px; background: rgba(255,255,255,.1); font-size: 0.78rem; min-width: 40px; }
 .pocket-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; max-width: 420px; }
 .pocket-count { font-size: min(34vw, 13rem); font-weight: 800; line-height: .85; color: #ff7a45; transition: opacity .3s; }
@@ -609,7 +613,7 @@ details.card[open] > summary::after { content: "–"; }
   <div class="pocket-top">
     <button type="button" class="pocket-x" id="pocketCancel" aria-label="Close">✕</button>
     <span class="pocket-clock"><span class="rec"></span><span id="pocketTime">0:00</span></span>
-    <span class="pocket-state" id="pocketState">Ready</span>
+    <span class="pocket-right"><span class="pocket-awake" id="pocketAwake" aria-live="polite"></span><span class="pocket-state" id="pocketState">Ready</span></span>
   </div>
 
   <div class="pocket-mid">
