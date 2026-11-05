@@ -310,7 +310,7 @@ function pocketState(st) {
   $("pocket").dataset.state = st;
   $("pocketState").textContent = { ready: "Ready", counting: "Counting", paused: "Paused" }[st];
   $("pocketLabel").textContent = st === "ready" ? "skips so far today" : "skips this session";
-  $("pocketHint").textContent = st === "ready" ? "Press Start, then put the phone in your pocket without locking it. The screen stays on and black; if it turns off, nothing is counted."
+  $("pocketHint").textContent = st === "ready" ? "Press Start, then put the phone in a pocket, armband or thigh strap, any way round, without locking it. The screen stays on and black; if it turns off, nothing is counted."
     : st === "counting" ? "Don't lock the phone. The bar above should jump with every skip. To pause, press and hold the button."
     : "Paused. Nothing is being counted.";
 }
@@ -336,7 +336,7 @@ async function startPocket() {
     }
   } catch { closePocketScreen(); showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
   if ($("sayHundreds").checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // unlock speech on iPhone
-  pk = { t: [], a: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
+  pk = { t: [], x: [], y: [], z: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
     shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
     hiddenMs: 0, hiddenAt: null, hides: 0, noGravity: 0, level: 0, peak: 0 };
   pk.onMotion = e => {
@@ -344,7 +344,7 @@ async function startPocket() {
     const g = e.accelerationIncludingGravity;
     if (!g || g.x == null) { pk.noGravity++; return; }
     const m = Math.hypot(g.x, g.y, g.z);
-    pk.gotData = true; pk.t.push(e.timeStamp / 1000 - pk.shift); pk.a.push(m);
+    pk.gotData = true; pk.t.push(e.timeStamp / 1000 - pk.shift); pk.x.push(g.x); pk.y.push(g.y); pk.z.push(g.z);
     const dev = Math.abs(m - 9.81); pk.level = Math.max(dev, pk.level * 0.9); pk.peak = Math.max(pk.peak, dev); // for the motion meter
   };
   addEventListener("devicemotion", pk.onMotion);
@@ -371,7 +371,7 @@ async function startPocket() {
   }, 600));
   $("pocketCount").textContent = "0"; pocketState("counting"); pocketGoalPaint(); haptic(20);
   pk.timer = setInterval(pocketTick, 1000);
-  pk.saver = setInterval(() => pk && SkipEngine.idb.put(PK_KEY, { started: pk.started, t: Float64Array.from(pk.t), a: Float32Array.from(pk.a) }), 10000);
+  pk.saver = setInterval(() => pk && SkipEngine.idb.put(PK_KEY, packMotion(pk)), 10000);
   setTimeout(() => { if (pk && !pk.gotData && !pk.paused) { $("pocketState").textContent = "No sensor data"; $("pocketHint").textContent = "This phone isn't sending motion data to the browser. Pause and discard, then use the camera or a video instead."; } }, 2500);
 }
 const activeSeconds = () => pk ? (pk.activeMs + (pk.paused ? 0 : performance.now() - pk.runFrom)) / 1000 : 0;
@@ -382,7 +382,7 @@ function pocketTick() {
   if (document.visibilityState !== "visible") { $("pocketState").textContent = "Screen off"; return; }
   if (pk.t.length < 200) return;
   try {
-    const r = SkipCore.countAccel(pk.t, pk.a); pk.count = r.skips;
+    const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z }); pk.count = r.skips;
     $("pocketCount").textContent = fmtInt(r.skips); pocketGoalPaint();
     if (Math.floor(r.skips / 100) > pk.lastSaid) { pk.lastSaid = Math.floor(r.skips / 100); pkSay(String(pk.lastSaid * 100)); }
   } catch {}
@@ -414,8 +414,8 @@ async function finishPocketSession() {
   haptic(30);
   const diag = { activeS: Math.round((P.activeMs + (P.paused ? 0 : performance.now() - P.runFrom)) / 1000), hiddenS: Math.round(P.hiddenMs / 1000), hides: P.hides, noGravity: P.noGravity, peak: Math.round(P.peak * 10) / 10, wakeLock: P.lock.isOn() };
   // keep the raw sensor data of the last session, so it can be checked (Profile > Pocket recording)
-  SkipEngine.idb.put("pocket-last", { started: P.started, t: Float64Array.from(P.t), a: Float32Array.from(P.a), diag, ua: navigator.userAgent });
-  await finishPocket(P.t, P.a, P.started, diag);
+  SkipEngine.idb.put("pocket-last", { ...packMotion(P), diag, ua: navigator.userAgent });
+  await finishPocket(P.t, motionOf(packMotion(P)), P.started, diag);
 }
 function discardPocket() {
   const b = $("pocketDiscard");
@@ -432,11 +432,14 @@ function pocketDiagnosis(t, diag) {
   if (diag.peak < 6) return "No skips found: the phone barely moved. Was it in your pocket while you skipped?";
   return "No skips found, although the phone did move. Please save the pocket recording (Profile › Pocket recording) and send it, so the counter can be tuned to your pocket.";
 }
+// stored motion: three axes (current), or just |a| (sessions saved by older versions)
+const packMotion = P => ({ started: P.started, t: Float64Array.from(P.t), x: Float32Array.from(P.x), y: Float32Array.from(P.y), z: Float32Array.from(P.z) });
+const motionOf = c => c.x ? { x: Array.from(c.x), y: Array.from(c.y), z: Array.from(c.z) } : Array.from(c.a);
 async function finishPocket(t, a, started, diag) {
   SkipEngine.idb.del(PK_KEY);
   if (t.length < 200) { showError(diag ? pocketDiagnosis(t, diag) : "That was too short to count."); return; }
   try {
-    const r = SkipCore.countAccel(Array.from(t), Array.from(a)); r.source = "pocket";
+    const r = SkipCore.countAccel(Array.from(t), a); r.source = "pocket";
     $("playerCard").hidden = true; $("speedNote").hidden = true;
     if (r.skips > 0) saveResult(r, new Date(started), "pocket", "pocket");
     else { renderResult(r); showError(pocketDiagnosis(t, diag)); }
@@ -476,10 +479,10 @@ $("pocketGoalInput").addEventListener("keydown", e => { if (e.key === "Enter") e
 // an unfinished pocket session (the page was closed or reloaded mid-session)
 async function checkUnfinished() {
   const c = await SkipEngine.idb.get(PK_KEY); if (!c || !c.t || c.t.length < 200) return;
-  let est = 0; try { est = SkipCore.countAccel(Array.from(c.t), Array.from(c.a)).skips; } catch {}
+  let est = 0; try { est = SkipCore.countAccel(Array.from(c.t), motionOf(c)).skips; } catch {}
   $("resumeText").textContent = `Started ${fmtDate(c.started, { weekday: "short", day: "numeric", month: "short" })} at ${new Date(c.started).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · about ${fmtInt(est)} skips`;
   $("resumeCard").hidden = false;
-  $("resumeSave").onclick = async () => { $("resumeCard").hidden = true; await finishPocket(c.t, c.a, c.started); };
+  $("resumeSave").onclick = async () => { $("resumeCard").hidden = true; await finishPocket(c.t, motionOf(c), c.started); };
   $("resumeDrop").onclick = () => { $("resumeCard").hidden = true; SkipEngine.idb.del(PK_KEY); toast("Discarded"); };
 }
 
@@ -732,7 +735,8 @@ $("pocketRecBtn").onclick = async () => {
   const r = await SkipEngine.idb.get("pocket-last");
   if (!r || !r.t || !r.t.length) { toast("No pocket recording yet. Do a pocket session first."); return; }
   const data = { app: "skip-count", kind: "pocket-recording", started: new Date(r.started).toISOString(), ua: r.ua, diag: r.diag,
-    t: Array.from(r.t, v => Math.round(v * 1000) / 1000), a: Array.from(r.a, v => Math.round(v * 100) / 100) };
+    t: Array.from(r.t, v => Math.round(v * 1000) / 1000),
+    ...(r.x ? { x: Array.from(r.x, v => Math.round(v * 100) / 100), y: Array.from(r.y, v => Math.round(v * 100) / 100), z: Array.from(r.z, v => Math.round(v * 100) / 100) } : { a: Array.from(r.a, v => Math.round(v * 100) / 100) }) };
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
   a.download = `skip-count-pocket-${dayKey(r.started)}.json`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);

@@ -345,13 +345,98 @@
     }
     return { t: tu, a: au, offset: t0 };
   }
+  // a: either |a| per sample (number array), or the three axes {x, y, z} of
+  // accelerationIncludingGravity. With axes we work out which way is down (gravity,
+  // averaged over ~2 s) and use only the vertical part: that makes it work in any
+  // orientation and on an arm, where the rope-turning circle would otherwise add a
+  // second bump per skip to the total.
   function countAccel(t, a, opts = {}) {
     if (t.length < 2 * ACCEL_HZ) throw new Error("That was too short to count.");
-    const r0 = resample(t, a, ACCEL_HZ);
-    // countSkips expects image-style "height" (smaller = higher); landings are maxima of a.
-    // No set-edge trimming: the arm swing / rope-catch bumps it removes in video barely move a pocket.
-    const y = Array.from(r0.a, v => -v);
-    const r = countSkips(Array.from(r0.t), y, ACCEL_HZ, Object.assign({ minAmplitude: 2.0, maxHz: 4.5, relProminence: 0.35, edgeFraction: 0 }, opts));
+    const G = 9.81;
+    let r0, v;
+    if (Array.isArray(a) || ArrayBuffer.isView(a)) { r0 = resample(t, a, ACCEL_HZ); v = r0.a; }
+    else {
+      const rx = resample(t, a.x, ACCEL_HZ), ry = resample(t, a.y, ACCEL_HZ), rz = resample(t, a.z, ACCEL_HZ);
+      r0 = rx;
+      const lp = c => filtfilt([biquad(0.4, ACCEL_HZ, "low")], c); // gravity: the slow part of each axis
+      const gx = lp(rx.a), gy = lp(ry.a), gz = lp(rz.a);
+      v = new Float64Array(rx.a.length);
+      for (let i = 0; i < v.length; i++) {
+        const n = Math.hypot(gx[i], gy[i], gz[i]) || 1;
+        v[i] = (rx.a[i] * gx[i] + ry.a[i] * gy[i] + rz.a[i] * gz[i]) / n; // vertical specific force
+      }
+    }
+    // Count the moments in the air. A phone that leaves the ground with you feels much
+    // lighter than 1 g for as long as you're up (it's falling with you). Walking, standing,
+    // landing, a loose phone rattling, and the arm's rope-turning swing only ever push the
+    // reading above that, so "light stretches" are skips, wherever the phone is worn.
+    const n = v.length, sm = filtfilt([biquad(8, ACCEL_HZ, "low")], Array.from(v)); // smooth out sensor jitter
+    const enter = opts.enter ?? 0.5 * G, exit = opts.exit ?? 0.72 * G, minDur = opts.minAir ?? 0.04;
+    let air = [], inAir = false, s0 = 0, lo = Infinity, loAt = 0;
+    for (let i = 0; i < n; i++) {
+      const x = sm[i];
+      if (!inAir && x < enter) { inAir = true; s0 = i; lo = x; loAt = i; }
+      else if (inAir) {
+        if (x < lo) { lo = x; loAt = i; }
+        if (x > exit || i === n - 1) { inAir = false; if ((i - s0) / ACCEL_HZ >= minDur) air.push({ a: s0, b: i, at: loAt, lo }); }
+      }
+    }
+    // one jump can show as two light stretches if the phone bumps something mid-air: merge close ones
+    const merged = [];
+    for (const e of air) {
+      const last = merged[merged.length - 1];
+      if (last && (e.a - last.b) / ACCEL_HZ < 0.18) { last.b = e.b; if (e.lo < last.lo) { last.lo = e.lo; last.at = e.at; } }
+      else merged.push({ ...e });
+    }
+    // Second witness, for armbands: the landing jolt. On an arm, the rope-turning swing pushes
+    // up while you're in the air and can hide the light moment, but every landing is still a
+    // sudden rise in force, while arm swings are smooth. A jolt only stands in for a jump when
+    // no light stretch was seen just before it (so nothing is counted twice), it's steep, and
+    // the phone felt at least somewhat light beforehand (walking never does both).
+    const smJ = filtfilt([biquad(12, ACCEL_HZ, "low")], Array.from(v));
+    const jerk = new Float64Array(n);
+    for (let i = 2; i < n; i++) jerk[i] = (smJ[i] - smJ[i - 2]) * ACCEL_HZ / 2;
+    const jFloor = opts.jerkFloor ?? 140, partLight = opts.partLight ?? 0.85 * G; // middle of the range that is exact in simulation (120-160)
+    const airEnds = merged.map(e => e.b);
+    let lastJolt = -Infinity, ai = 0;
+    for (let i = 3; i < n - 1; i++) {
+      if (jerk[i] < jFloor || jerk[i] < jerk[i - 1] || jerk[i] < jerk[i + 1]) continue;
+      if ((i - lastJolt) / ACCEL_HZ < 0.25) continue;                      // a rattling phone: one landing
+      while (ai < airEnds.length && airEnds[ai] < i - Math.round(0.35 * ACCEL_HZ)) ai++;
+      const covered = ai < airEnds.length && merged[ai].a <= i + 2;         // a light stretch already counted this jump
+      lastJolt = i;
+      if (covered) continue;
+      let mn = Infinity; for (let k = Math.max(0, i - Math.round(0.3 * ACCEL_HZ)); k < i; k++) if (sm[k] < mn) mn = sm[k];
+      if (mn < partLight) merged.push({ a: i - 2, b: i - 1, at: i - 2, lo: mn, jolt: true });
+    }
+    merged.sort((p, q) => p.at - q.at);
+
+    // sets: jumps in a steady rhythm; a pause of more than ~1.7 beats (or 1.2 s) ends a set
+    const times = merged.map(e => e.at / ACCEL_HZ), gaps = [];
+    for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] < 1.2) gaps.push(times[i] - times[i - 1]);
+    const beat = gaps.length >= 3 ? median(gaps) : 0.5, maxGap = Math.max(1.0, 2.6 * beat);
+    const minSet = opts.minSetSkips ?? 3, sets = [], skipTimes = [];
+    let cur = [], filled = 0;
+    const close = () => {
+      if (cur.length >= minSet) {
+        sets.push({ start: Math.max(0, cur[0] - beat / 2), end: Math.min(n / ACCEL_HZ, cur[cur.length - 1] + beat / 2), skips: cur.length });
+        skipTimes.push(...cur);
+      }
+      cur = [];
+    };
+    for (const t1 of times) {
+      const prev = cur[cur.length - 1];
+      if (cur.length && t1 - prev > maxGap) close();
+      else if (cur.length && t1 - prev > 1.6 * beat && opts.fillGaps !== false) { cur.push((prev + t1) / 2); filled++; } // skipping is steady: a two-beat gap inside a set is one jump the sensor missed
+      cur.push(t1);
+    }
+    close();
+    const total = n / ACCEL_HZ, jumping = sets.reduce((q, x) => q + x.end - x.start, 0);
+    // chart signal: how much lighter than 1 g, centred
+    const filtered = Float64Array.from(sm, x => (G - x) / G);
+    const r = { skips: skipTimes.length, skipTimes, sets, jumpingSeconds: jumping, totalSeconds: total, restSeconds: Math.max(0, total - jumping),
+      cadenceHz: 1 / beat, filtered, active: Array.from(sm, () => true), filled };
+
     r.skipTimes = r.skipTimes.map(x => x + r0.offset);
     for (const st of r.sets) { st.start += r0.offset; st.end += r0.offset; }
     r.fps = ACCEL_HZ; r.offset = r0.offset; r.bodySize = 1;

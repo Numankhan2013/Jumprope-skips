@@ -79,6 +79,64 @@ for (const [name, plan, o] of [
   ok &&= pass;
   console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${w.truth}, sets [${r.sets.map(s => s.skips)}]`);
 }
+// Thigh strap and armband, as 3-axis readings in a random orientation. On the arm the
+// rope-turning circle adds a swing on every turn and softens the landings.
+// body vertical specific force over one skip cycle (what a sensor stuck to the hip would feel)
+function bodyF(ph, flight, peak) { // ph in [0,1)
+  if (ph < flight) return 0;                                              // in the air
+  const s = ph - flight, c = 1 - flight;
+  return G / c * 0.85 + peak * Math.exp(-s / 0.07) + 2 * Math.sin(Math.PI * s / c);
+}
+function place3d(place, plan, seed = 1, o = {}) {
+  const R = rng(seed), t = [], a = [], X = [], Y = [], Z = []; let now = 0, truth = 0;
+  // random fixed orientation of the phone (rotation about two axes)
+  const p1 = R() * Math.PI * 2, p2 = (R() - 0.5) * Math.PI, c1 = Math.cos(p1), s1 = Math.sin(p1), c2 = Math.cos(p2), s2 = Math.sin(p2);
+  const push = (x, y, z) => {
+    const x1 = c1 * x - s1 * y, y1 = s1 * x + c1 * y, z1 = z;           // about z
+    const y2 = c2 * y1 - s2 * z1, z2 = s2 * y1 + c2 * z1;               // about x
+    t.push(now); a.push(Math.hypot(x, y, z)); X.push(x1); Y.push(y2); Z.push(z2); now += 1 / (60 * (0.92 + R() * 0.16));
+  };
+  for (const [kind, n, rate] of plan) {
+    if (kind === "jump" || kind === "swing") {
+      const T = 60 / rate, turns = o.turns || 1;               // rope turns per jump (2 = double unders)
+      const armA = (o.arm || 5) * (0.8 + R() * 0.4);            // arm circling (m/s²)
+      for (let k = 0; k < n; k++) {
+        const start = now, end = now + T * (0.94 + R() * 0.12), flight = (o.flight || 0.35) * (0.85 + R() * 0.3), peak = (14 + R() * 16);
+        while (now < end) {
+          const ph = (now - start) / (end - start);
+          let vert = kind === "jump" ? bodyF(ph, flight, peak) : G + (R() - 0.5);  // "swing": turning the rope without jumping
+          let x = 0, y = vert, z = 0;
+          if (place === "thigh") { y = vert * 1.1 + (ph < flight ? 1.5 * Math.sin(ph / flight * Math.PI) : 0); x = 2.5 * Math.sin(2 * Math.PI * ph); }
+          if (place === "arm") {
+            const damp = kind === "jump" ? 0.55 : 1;                                  // landing shock softened by the body
+            y = G + (vert - G) * damp; if (kind === "jump" && ph < flight) y = 1.5 + R() * 1.5;
+            const th = 2 * Math.PI * (turns * ph) + 0.8;                              // arm circles with the rope
+            x += armA * Math.cos(th); y += armA * Math.sin(th) * 0.7; z += 1.2 * Math.sin(th * 2);
+          }
+          push(x + (R() - .5) * 1.5, y + (R() - .5) * 1.5, z + (R() - .5) * 1.5);
+        }
+        if (kind === "jump") truth++;
+      }
+    } else if (kind === "walk") { const end = now + n; while (now < end) { const ph = (now * 1.9) % 1, arm = place === "arm" ? 3 * Math.sin(2 * Math.PI * now * 0.95) : 0; push(arm + (R() - .5), G + (ph < .12 ? 6 * Math.sin(ph / .12 * Math.PI) : 0) - 1.5 * Math.sin(2 * Math.PI * ph) + (R() - .5) * 2, (R() - .5)); } }
+    else { const end = now + n; while (now < end) push((R() - .5), G + (R() - .5), (R() - .5)); }
+  }
+  return { t, a, xyz: { x: X, y: Y, z: Z }, truth };
+}
+for (const [name, place, plan, o, truth] of [
+  ["thigh strap, 100 skips", "thigh", [["rest", 3], ["jump", 100, 120], ["rest", 3]], {}, 100],
+  ["thigh strap, sets + walking", "thigh", [["rest", 3], ["jump", 30, 115], ["walk", 6], ["jump", 40, 125], ["walk", 5], ["jump", 15, 110], ["rest", 3]], {}, 85],
+  ["armband, 100 skips", "arm", [["rest", 3], ["jump", 100, 120], ["rest", 3]], {}, 100],
+  ["armband, low hops", "arm", [["rest", 3], ["jump", 100, 140], ["rest", 3]], { flight: 0.25 }, 100],
+  ["armband, big arm circles", "arm", [["rest", 3], ["jump", 100, 120], ["rest", 3]], { arm: 9 }, 100],
+  ["armband, fast 170/min", "arm", [["rest", 3], ["jump", 100, 170], ["rest", 3]], {}, 100],
+  ["armband, sets + walking", "arm", [["rest", 3], ["jump", 30, 115], ["walk", 6], ["jump", 40, 125], ["walk", 5], ["jump", 15, 110], ["rest", 3]], {}, 85],
+  ["armband, turning the rope without jumping", "arm", [["rest", 3], ["swing", 30, 110], ["rest", 3]], {}, 0],
+  ["armband, just walking", "arm", [["walk", 40]], {}, 0],
+]) for (const seed of [1, 2, 3]) {
+  const w = place3d(place, plan, seed, o), r = core.countAccel(w.t, w.xyz), pass = Math.abs(r.skips - truth) <= Math.max(1, Math.round(truth * 0.01));
+  ok &&= pass;
+  console.log(`${pass ? "ok  " : "FAIL"} ${name.padEnd(44)} seed ${seed}: counted ${r.skips}, truth ${truth}, sets [${r.sets.map(s => s.skips)}]`);
+}
 // a long session: 40 minutes, ~5,000 skips with rests
 const plan = []; for (let i = 0; i < 25; i++) plan.push(["jump", 200, 115 + (i % 4) * 8], ["rest", 25 + (i % 3) * 10], ...(i % 5 === 4 ? [["walk", 8]] : []));
 const w = workout(plan, 7), t0 = Date.now(), r = core.countAccel(w.t, w.a);

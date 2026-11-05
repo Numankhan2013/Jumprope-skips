@@ -2,7 +2,7 @@
 // The page is cached on install and refreshed in the background (network first for the
 // page itself, so a new version shows up on the next launch). Libraries and fonts from
 // CDNs are cached the first time they load. Firebase / Firestore traffic is never cached.
-const VERSION = "4c6c08d64e";
+const VERSION = "3cbc80bf76";
 const SHELL = `skipcount-shell-${VERSION}`, CDN = "skipcount-cdn-v1";
 const SHELL_FILES = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/maskable-512.png", "./icons/apple-touch-icon.png"];
 
