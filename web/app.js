@@ -36,7 +36,8 @@ function loadProfile() {
   if (p.sex) $(p.sex === "female" ? "sexF" : "sexM").checked = true;
   showHeightUnit(p.heightUnit || "cm");
 }
-function saveProfile() { const old = prof(), p = { goal: old.goal, goalByDay: old.goalByDay }; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
+// keep everything else in the profile (goals, cue settings…) when saving the body details
+function saveProfile() { const p = { ...prof() }; for (const id of profileIds) p[id] = $(id).value; p.sex = document.querySelector('input[name="sex"]:checked').value; store.set("skipcount.profile", p); window.SkipJournal?.touchProfile(); }
 function profile() {
   let kg = parseFloat($("weight").value) || 70;
   if ($("weightUnit").value === "lb") kg *= 0.45359237;
@@ -305,7 +306,51 @@ async function stopLive() {
 // Nothing is recorded; the count is live and final as soon as you stop.
 let pk = null;
 const PK_KEY = "pocket-current";
-const pkSay = text => { try { if ($("sayHundreds").checked && "speechSynthesis" in window) { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } } catch {} };
+// ---- sound cues: settings live in the (synced) profile
+const CUE_DEFAULT = { every: 500, style: "beep", goal: true };
+const cueCfg = () => ({ ...CUE_DEFAULT, ...(prof().cues || {}) });
+function setCues(patch) { setProf({ cues: { ...cueCfg(), ...patch } }); paintCues(); }
+let actx = null;
+// Must run inside a tap (iPhone only allows sound that a tap started).
+function audioReady() {
+  // "ambient": mix with Spotify etc. instead of pausing it (Safari 16.4+; others ignore it)
+  try { if (navigator.audioSession) navigator.audioSession.type = "ambient"; } catch {}
+  try { if (!actx) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) actx = new AC(); } actx?.resume?.(); } catch {}
+  if (cueCfg().style === "voice" && "speechSynthesis" in window) { try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch {} }
+}
+function beep(notes) { // [[frequency Hz, length ms], ...]
+  if (!actx) return;
+  let t = actx.currentTime + 0.03;
+  for (const [f, ms] of notes) {
+    const o = actx.createOscillator(), g = actx.createGain(), d = ms / 1000;
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + d + 0.02);
+    t += d + 0.08;
+  }
+}
+function cue(kind, n) { // kind: "mark" (every N) or "goal"
+  const c = cueCfg();
+  if (c.style === "voice" && "speechSynthesis" in window) {
+    try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(kind === "goal" ? `Goal reached. ${n} skips today.` : String(n))); } catch {}
+    return;
+  }
+  beep(kind === "goal" ? [[660, 130], [880, 130], [1175, 300]] : [[988, 110], [988, 110]]);
+}
+const cueLabel = c => !c.every ? "Off" : `Every ${fmtInt(c.every)}${c.style === "voice" ? " (voice)" : ""}`;
+function paintCues() {
+  const c = cueCfg(), presets = [0, 100, 250, 500, 1000];
+  $("cueEvery").value = presets.includes(c.every) ? String(c.every) : "custom";
+  $("cueCustomWrap").hidden = presets.includes(c.every); if (!presets.includes(c.every)) $("cueCustom").value = c.every;
+  (c.style === "voice" ? $("cueVoice") : $("cueBeep")).checked = true; $("cueGoal").checked = !!c.goal;
+  $("cueHint").textContent = c.style === "voice"
+    ? "The voice says the number. Your phone may lower or briefly pause your music while it speaks; choose Beeps to keep the music going."
+    : "Beeps play over your music (Spotify and so on) without pausing it. On iPhone they follow the silent switch.";
+  // pocket screen picker
+  const sel = $("pocketCue"), opts = [...new Set([...presets, c.every])].sort((a, b) => a - b);
+  sel.innerHTML = opts.map(v => `<option value="${v}">${v ? `Every ${fmtInt(v)}` : "Off"}</option>`).join("");
+  sel.value = String(c.every);
+}
 function pocketState(st) {
   $("pocket").dataset.state = st;
   $("pocketState").textContent = { ready: "Ready", counting: "Counting", paused: "Paused" }[st];
@@ -318,7 +363,7 @@ function pocketGoalPaint() {
   const before = pk ? pk.todayBefore : todaySkips(), now = before + (pk ? pk.count : 0), g = goal();
   $("pocketToday").textContent = fmtInt(now); $("pocketGoalNum").textContent = fmtInt(g);
   $("pocketGoalFill").style.width = `${Math.min(100, now / g * 100)}%`;
-  if (pk && !pk.goalHit && now >= g && pk.count > 0) { pk.goalHit = true; haptic([60, 60, 120]); pkSay(`Goal reached. ${now} skips today.`); }
+  if (pk && !pk.goalHit && now >= g && pk.count > 0) { pk.goalHit = true; haptic([60, 60, 120]); if (cueCfg().goal) cue("goal", now); }
 }
 // 1) open: ready screen, nothing counts yet
 async function openPocket() {
@@ -335,7 +380,7 @@ async function startPocket() {
       closePocketScreen(); showError("Motion access was not allowed. On iPhone: Settings › Apps › Safari › Motion & Orientation Access, then try again."); return;
     }
   } catch { closePocketScreen(); showError("Motion access was not allowed. Reload the page and tap Pocket again."); return; }
-  if ($("sayHundreds").checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); // unlock speech on iPhone
+  audioReady(); // this tap unlocks sound on iPhone
   pk = { t: [], x: [], y: [], z: [], started: Date.now(), lock: wakeLock(), lastSaid: 0, count: 0, gotData: false, todayBefore: todaySkips(),
     shift: 0, activeMs: 0, runFrom: performance.now(), paused: false, goalHit: todaySkips() >= goal(),
     hiddenMs: 0, hiddenAt: null, hides: 0, noGravity: 0, level: 0, peak: 0 };
@@ -384,7 +429,8 @@ function pocketTick() {
   try {
     const r = SkipCore.countAccel(pk.t, { x: pk.x, y: pk.y, z: pk.z }); pk.count = r.skips;
     $("pocketCount").textContent = fmtInt(r.skips); pocketGoalPaint();
-    if (Math.floor(r.skips / 100) > pk.lastSaid) { pk.lastSaid = Math.floor(r.skips / 100); pkSay(String(pk.lastSaid * 100)); }
+    const every = cueCfg().every;
+    if (every > 0 && Math.floor(r.skips / every) > pk.lastSaid) { pk.lastSaid = Math.floor(r.skips / every); cue("mark", pk.lastSaid * every); }
   } catch {}
 }
 // 3) pause / resume: paused time is cut out, so it doesn't count as rest
@@ -797,7 +843,17 @@ for (const id of ["heightUnit", "heightUnit2"]) $(id).addEventListener("change",
 $("file").addEventListener("change", e => { const f = e.target.files[0]; if (f) analyseFile(f); });
 $("liveBtn").addEventListener("click", startLive);
 $("pocketBtn").addEventListener("click", openPocket);
-$("sayHundreds").addEventListener("change", e => { if (e.target.checked && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance("")); }); // iPhone only allows speech that starts from a tap
+// sound cue settings (Profile) and the shortcut on the pocket screen
+$("cueEvery").addEventListener("change", e => {
+  if (e.target.value === "custom") { $("cueCustomWrap").hidden = false; $("cueCustom").focus(); return; }
+  setCues({ every: +e.target.value }); toast(`Sound cue: ${cueLabel(cueCfg())}`);
+});
+$("cueCustom").addEventListener("change", e => { const v = Math.round(+e.target.value); if (v >= 10) { setCues({ every: v }); toast(`Sound cue: ${cueLabel(cueCfg())}`); } });
+document.querySelectorAll('input[name="cueStyle"]').forEach(r => r.addEventListener("change", () => { setCues({ style: r.value }); audioReady(); }));
+$("cueGoal").addEventListener("change", e => setCues({ goal: e.target.checked }));
+$("cueTest").addEventListener("click", () => { audioReady(); cue("mark", cueCfg().every || 100); });
+$("pocketCue").addEventListener("change", e => { setCues({ every: +e.target.value }); audioReady(); });
+paintCues();
 $("liveStop").addEventListener("click", stopLive);
 $("sessDate").addEventListener("change", e => {
   if (!currentId || !e.target.value) return;
@@ -855,7 +911,7 @@ function showLastSession() {
     totalSeconds: 38.7, restSeconds: 38.7 - jump, filtered: x, fps, offset: 0, bodySize: 0.7 }, { example: true });
 })();
 renderBased();
-window.loadProfile = () => { loadProfile(); renderBased(); renderHome(); if (calSource) renderCalories(calSource.skips, calSource.jumpS, calSource.restS); };
+window.loadProfile = () => { loadProfile(); renderBased(); renderHome(); paintCues(); if (calSource) renderCalories(calSource.skips, calSource.jumpS, calSource.restS); };
 window.renderCalories = renderCalories;
 checkUnfinished();
 if (new URLSearchParams(location.search).get("start") === "pocket") { try { history.replaceState(null, "", location.pathname); } catch {} setTimeout(openPocket, 300); }

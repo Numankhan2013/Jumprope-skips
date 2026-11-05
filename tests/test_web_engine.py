@@ -37,3 +37,12 @@ def test_pocket_mode_counts_synthetic_accelerometer_workouts():
     """Phone-in-pocket counting on simulated sensor data: exact sets, walking ignored."""
     r = subprocess.run(["node", str(ROOT / "web" / "test_accel.js")], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_built_page_scripts_parse():
+    """docs/index.html is what the site serves: every inlined script must be valid JavaScript."""
+    check = ("const fs=require('fs');const h=fs.readFileSync(process.argv[1],'utf8');let n=0;"
+             "for(const m of h.matchAll(/<script id=\"(\\w+)\">([\\s\\S]*?)<\\/script>/g)){new Function(m[2]);n++}"
+             "if(n<5)throw new Error('expected 5 inlined scripts, found '+n);")
+    r = subprocess.run(["node", "-e", check, str(ROOT / "docs" / "index.html")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
